@@ -10,17 +10,21 @@
 int main() {
     int fd;
     int ret = 0;
-    uint32_t speed = 1000000; // 1MHz 稳妥起见
+    
     uint8_t mode = SPI_MODE_0; // 极性相位配置，需和 STM32 保持一致
     
     // 我们要接收 4 个字节的雷达数据测试
-    uint8_t tx[] = {0x00, 0x00, 0x00, 0x00}; 
-    uint8_t rx[4] = {0, };
+ // ... 前面保持不变 ...
+    uint8_t tx[264] = {0}; 
+    uint8_t rx[264] = {0}; // 扩大接收缓冲区
+
+    // 稍微降低一点时钟频率，排除杜邦线太长导致的信号干扰
+    uint32_t speed = 1000000; // 500kHz
 
     struct spi_ioc_transfer tr = {
         .tx_buf = (unsigned long)tx,
         .rx_buf = (unsigned long)rx,
-        .len = 4,
+        .len = 264, // 一次性抽 32 个字节出来
         .speed_hz = speed,
     };
 
@@ -38,7 +42,12 @@ int main() {
     if (ret < 1) {
         perror("SPI 传输失败");
     } else {
-        printf("收到数据: 0x%02X 0x%02X 0x%02X 0x%02X\n", rx[0], rx[1], rx[2], rx[3]);
+        printf("收到数据:\n");
+        // 专业的 Hexdump 打印格式，方便找规律
+        for(int i = 0; i < 264; i++) {
+            printf("%02X ", rx[i]);
+            if ((i + 1) % 8 == 0) printf("\n"); // 每 8 个字节换一行
+        }
     }
 
     close(fd);

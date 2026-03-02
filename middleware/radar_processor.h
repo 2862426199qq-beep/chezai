@@ -15,6 +15,7 @@ namespace RadarConfig {
     constexpr double FRAME_MS    = 50.0;
     constexpr double RANGE_RES_M = C_MPS / (2.0 * BW_HZ);
     constexpr double RANGE_MAX_M = (N_SAMPLES / 2) * RANGE_RES_M;
+    constexpr int    FRAME_SIZE  = 264;  /* 保持 264 */
 }
 
 struct RadarTarget {
@@ -23,6 +24,7 @@ struct RadarTarget {
     double velocity_mps;
     double amplitude;
     double phase_rad;
+    double angle_deg;
 
     std::string label() const {
         if (range_m >= 8.0  && range_m <= 12.0) return "行人";
@@ -45,21 +47,14 @@ public:
         int    guard_cells;
         int    train_cells;
         double threshold_dB;
-        CfarParams()
-            : guard_cells(2)
-            , train_cells(4)
-            , threshold_dB(10.0)
-        {}
+        CfarParams() : guard_cells(2), train_cells(4), threshold_dB(15.0) {}
     };
 
     RadarProcessor(CfarParams params = CfarParams());
 
-    /*
-     * 核心接口：输入 64 个 IQ 点 + 帧序号
-     * 返回检测到的目标（只有新帧才更新）
-     */
     std::vector<RadarTarget> process(const IQPoint raw_iq[RadarConfig::N_SAMPLES],
-                                     uint16_t frame_seq);
+                                     uint16_t frame_seq,
+                                     double scan_angle_deg);
 
     const std::vector<double>& get_magnitude_spectrum() const { return magnitude_; }
     int frame_count() const { return frame_count_; }
@@ -71,7 +66,8 @@ private:
     void fft(std::vector<Complex>& x);
     void bit_reverse(std::vector<Complex>& x);
     std::vector<RadarTarget> cfar_detect(const std::vector<double>& mag,
-                                          const std::vector<double>& phase);
+                                          const std::vector<double>& phase,
+                                          double angle_deg);
     double calc_velocity(double phase_now, double phase_prev, int seq_gap);
 
     CfarParams            cfar_params_;

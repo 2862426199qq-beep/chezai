@@ -21,12 +21,15 @@ ai_voice/
 │   ├── voice_pipeline.h    # 全链路编排器（run / runStream）
 │   ├── local_asr.h         # LocalASR  实现（whisper.cpp）
 │   ├── llm_engine.h        # LlmEngine 实现（llama.cpp + DeepSeek）
-│   └── tts_engine.h        # TtsEngine 实现（espeak-ng + 双缓冲队列）
+│   ├── tts_engine.h        # TtsEngine 实现（espeak-ng + 双缓冲队列）
+│   └── mic_capture.h       # MicCapture 实现（ALSA 麦克风录音）
 ├── src/
 │   ├── voice_pipeline.cpp  # 流水线逻辑（批量模式 + 流式模式）
 │   ├── local_asr.cpp       # ASR：stub 或真实 whisper.cpp 推理
 │   ├── llm_engine.cpp      # LLM：stub 或真实 llama.cpp 流式推理
 │   ├── tts_engine.cpp      # TTS：espeak-ng + 工作线程队列
+│   ├── mic_capture.cpp     # 麦克风采集：ALSA 录音 → WAV 文件
+│   ├── asr_test.cpp        # ASR 单独调试工具（麦克风录音 → ASR 识别）
 │   └── main.cpp            # 完整链路测试程序
 ├── CMakeLists.txt
 └── README.md
@@ -125,6 +128,54 @@ arecord -f S16_LE -r 16000 -c 1 -d 3 test.wav
 # 运行完整流水线
 ./ai_voice_test test.wav
 ```
+
+---
+
+## 单独调试语言识别（ASR）模块
+
+### 快速终端测试（asr_test）
+
+`asr_test` 是专门用于调试 ASR 的独立工具，支持从麦克风/耳麦直接录音后识别，无需启动完整流水线。
+
+#### Stub 模式（无需任何依赖，验证编译）
+
+```bash
+cd ai_voice/build
+cmake ..
+make asr_test
+
+./asr_test --list   # 查看 ALSA 识别到的采集设备（stub 模式返回示例列表）
+./asr_test -t 3     # 录音 3 秒 → ASR 识别（stub 返回固定文本）
+```
+
+#### 真实麦克风模式（RK3588S 板子上运行）
+
+```bash
+# 1. 安装 ALSA 开发库
+sudo apt install libasound2-dev
+
+# 2. 编译（启用 ALSA 录音 + 真实 whisper.cpp 模型）
+cd ai_voice/build
+cmake .. \
+    -DUSE_ALSA=ON \
+    -DUSE_REAL_MODELS=ON \
+    -DWHISPER_DIR=../../whisper.cpp
+make asr_test
+
+# 3. 查看系统识别到的采集设备（包括耳麦）
+./asr_test --list
+# 也可用系统命令：
+arecord -l
+
+# 4. 指定耳麦设备录音识别（耳麦通常是 plughw:1,0 或 plughw:2,0）
+./asr_test -D plughw:1,0 -t 5 -m models/ggml-small-q5_1.bin
+```
+
+**耳麦无法识别的排查步骤：**
+1. `arecord -l` — 确认系统已识别耳麦，记录对应的 card/device 编号
+2. `arecord -D plughw:<card>,<device> -f S16_LE -r 16000 -c 1 -d 3 /tmp/test.wav` — 先用系统命令验证录音
+3. `aplay /tmp/test.wav` — 回放确认音频内容正确
+4. `./asr_test -D plughw:<card>,<device> -t 5` — 再用 asr_test 测试识别
 
 ---
 

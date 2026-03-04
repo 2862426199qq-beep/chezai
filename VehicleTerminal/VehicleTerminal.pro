@@ -1,4 +1,4 @@
-QT       += core gui multimedia network
+QT       += core gui multimedia network concurrent
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 CONFIG += c++14
 
@@ -8,6 +8,9 @@ TARGET   = VehicleTerminal
 TEMPLATE = app
 
 INCLUDEPATH += ../middleware
+INCLUDEPATH += ../ai_voice/include
+
+LIBS += -L../ai_voice/build -lai_voice_lib -lstdc++ -lpthread
 
 SOURCES += \
     main.cpp \

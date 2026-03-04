@@ -1,5 +1,11 @@
 #include "mainwindow.h"
 #include <QApplication>
+#include <QtConcurrent/QtConcurrent>
+#include <QMetaObject>
+#include <QProcessEnvironment>
+
+#include "llm_engine.h"
+#include "tts_engine.h"
 
 static const char* DARK_STYLE = R"(
     QMainWindow {
@@ -29,6 +35,15 @@ static const char* DARK_STYLE = R"(
         background-color: #0f3460;
     }
 )";
+
+static QString resolveBaiduAsrToken()
+{
+    const QString envToken = qEnvironmentVariable("BAIDU_ASR_TOKEN").trimmed();
+    if (!envToken.isEmpty()) {
+        return envToken;
+    }
+    return "24.464f01bbb7583296b1e578ddf66073f0.2592000.1731685220.282335-115895512";
+}
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -118,12 +133,14 @@ void MainWindow::setupUI()
         btnMap     = makeNavBtn("Map",     "#4caf50");
         btnMonitor = makeNavBtn("Monitor", "#2196f3");
         btnSetting = makeNavBtn("Setting", "#9c27b0");
+        btnAiVoice = makeNavBtn("AI Voice", "#00d4ff");
 
         navRow->addWidget(btnMusic);
         navRow->addWidget(btnWeather);
         navRow->addWidget(btnMap);
         navRow->addWidget(btnMonitor);
         navRow->addWidget(btnSetting);
+        navRow->addWidget(btnAiVoice);
 
         midCol->addWidget(camTitle);
         midCol->addWidget(cameraLabel, 1);
@@ -266,6 +283,7 @@ void MainWindow::setupConnections()
     connect(btnMap,      &QPushButton::clicked, this, &MainWindow::onBtnMap);
     connect(btnMonitor,  &QPushButton::clicked, this, &MainWindow::onBtnMonitor);
     connect(btnSetting,  &QPushButton::clicked, this, &MainWindow::onBtnSetting);
+    connect(btnAiVoice,  &QPushButton::clicked, this, &MainWindow::onBtnAiVoice);
     connect(btnRadarFull,&QPushButton::clicked, this, &MainWindow::onBtnRadarFull);
 }
 
@@ -341,34 +359,164 @@ void MainWindow::onBtnRadarFull()
     container->show();
 }
 
+void MainWindow::onBtnAiVoice()
+{
+    if (m_aiVoicePending) {
+        return;
+    }
+
+    m_aiVoicePending = true;
+    lblStatus->setText("AI Voice: Running...");
+    lblStatus->setStyleSheet("color: #00d4ff; font-size: 13px;");
+
+    AsrThread->startRecord();
+    QTimer::singleShot(2500, this, [this]() {
+        AsrThread->stopRecord();
+        lblStatus->setText("AI Voice: Recognizing...");
+        lblStatus->setStyleSheet("color: #00d4ff; font-size: 13px;");
+    });
+
+    QTimer::singleShot(15000, this, [this]() {
+        if (m_aiVoicePending) {
+            m_aiVoicePending = false;
+            lblStatus->setText("AI Voice: Timeout");
+            lblStatus->setStyleSheet("color: #ff4444; font-size: 13px;");
+        }
+    });
+}
+
 void MainWindow::on_handleRecord()
 {
     QFile file("./record.wav");
-    if (!file.open(QIODevice::ReadOnly)) return;
+    if (!file.open(QIODevice::ReadOnly)) {
+        if (m_aiVoicePending) {
+            m_aiVoicePending = false;
+            lblStatus->setText("AI Voice: Record Failed");
+            lblStatus->setStyleSheet("color: #ff4444; font-size: 13px;");
+        }
+        return;
+    }
     request->setUrl(QUrl::fromUserInput("http://vop.baidu.com/server_api"));
     QByteArray fileData = file.readAll();
     file.close();
+    if (m_aiVoicePending && fileData.size() < 12000) {
+        m_aiVoicePending = false;
+        lblStatus->setText("AI Voice: Audio Too Short/Invalid");
+        lblStatus->setStyleSheet("color: #ff4444; font-size: 13px;");
+        return;
+    }
+
     QByteArray base64Encoded = fileData.toBase64();
     QJsonObject obj;
-    obj.insert("format",  QJsonValue("pcm"));
+    obj.insert("format",  QJsonValue("wav"));
     obj.insert("rate",    QJsonValue(16000));
     obj.insert("channel", QJsonValue(1));
     obj.insert("cuid",    QJsonValue("L5a9DNZMyQD4MyipDR3ck7jhmdvtagjZ"));
-    obj.insert("token",   QJsonValue("24.464f01bbb7583296b1e578ddf66073f0.2592000.1731685220.282335-115895512"));
+    obj.insert("token",   QJsonValue(resolveBaiduAsrToken()));
     obj.insert("speech",  QJsonValue(QString(base64Encoded)));
     obj.insert("len",     QJsonValue(fileData.length()));
-    networkManage->post(*request, QJsonDocument(obj).toJson());
+    if (m_aiVoicePending) {
+        lblStatus->setText("AI Voice: Uploading...");
+        lblStatus->setStyleSheet("color: #00d4ff; font-size: 13px;");
+    }
+    QNetworkReply *asrReply = networkManage->post(*request, QJsonDocument(obj).toJson());
+    QTimer::singleShot(10000, this, [this, asrReply]() {
+        if (!m_aiVoicePending || !asrReply) {
+            return;
+        }
+        if (asrReply->isRunning()) {
+            asrReply->abort();
+        }
+    });
 }
 
 void MainWindow::getSpeechResult(QNetworkReply *reply)
 {
+    if (m_aiVoicePending && reply->error() != QNetworkReply::NoError) {
+        m_aiVoicePending = false;
+        lblStatus->setText("AI Voice: ASR Network Error");
+        lblStatus->setStyleSheet("color: #ff4444; font-size: 13px;");
+        return;
+    }
+
     QByteArray content = reply->readAll();
     QJsonDocument doc = QJsonDocument::fromJson(content);
-    if (!doc.isObject()) return;
+    if (!doc.isObject()) {
+        if (m_aiVoicePending) {
+            m_aiVoicePending = false;
+            lblStatus->setText("AI Voice: ASR Parse Failed");
+            lblStatus->setStyleSheet("color: #ff4444; font-size: 13px;");
+        }
+        return;
+    }
     QJsonObject obj = doc.object();
     QJsonArray results = obj.value("result").toArray();
-    if (results.isEmpty()) return;
+    if (results.isEmpty()) {
+        if (m_aiVoicePending) {
+            m_aiVoicePending = false;
+            QString errMsg = obj.value("err_msg").toString();
+            int errNo = obj.value("err_no").toInt(-1);
+            if (errNo == 3302) {
+                errMsg = "Token Invalid(3302), set BAIDU_ASR_TOKEN";
+            }
+            if (errMsg.isEmpty()) {
+                errMsg = "ASR Empty Result";
+            }
+            lblStatus->setText(QString("AI Voice: %1").arg(errMsg));
+            lblStatus->setStyleSheet("color: #ff4444; font-size: 13px;");
+        }
+        return;
+    }
     QString asr = results.at(0).toString();
+
+    if (m_aiVoicePending) {
+        m_aiVoicePending = false;
+        lblStatus->setText(QString("AI Voice: %1").arg(asr));
+
+        QtConcurrent::run([this, asr]() {
+            LlmEngine llm;
+            TtsEngine tts;
+            const std::string llmModel = "models/DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf";
+
+            if (!llm.init(llmModel, 4)) {
+                QMetaObject::invokeMethod(this, [this]() {
+                    lblStatus->setText("AI Voice: LLM Init Failed");
+                    lblStatus->setStyleSheet("color: #ff4444; font-size: 13px;");
+                }, Qt::QueuedConnection);
+                return;
+            }
+
+            const std::string userText = asr.toStdString();
+            const std::string replyText = llm.chat(userText);
+            const std::string intent = llm.parseIntent(replyText);
+
+            std::string speakText = replyText;
+            const std::string tagStart = "[INTENT:";
+            std::size_t tagPos = speakText.find(tagStart);
+            if (tagPos != std::string::npos) {
+                speakText = speakText.substr(0, tagPos);
+            }
+            tts.speak(speakText);
+
+            QMetaObject::invokeMethod(this, [this, intent]() {
+                if (intent == "OPEN_MUSIC") {
+                    emit SendCommandToMusic(MUSIC_COMMAND_SHOW);
+                    emit SendCommandToMusic(MUSIC_COMMAND_PLAY);
+                } else if (intent == "OPEN_MAP") {
+                    emit SendCommandToMap(MAP_COMMAND_SHOW);
+                } else if (intent == "OPEN_MONITOR") {
+                    emit SendCommandToMonitor(MONITOR_COMMAND_SHOW);
+                } else if (intent == "OPEN_WEATHER") {
+                    weather->show();
+                }
+
+                lblStatus->setText(QString("AI Voice: %1")
+                                   .arg(QString::fromStdString(intent)));
+                lblStatus->setStyleSheet("color: #00ff88; font-size: 13px;");
+            }, Qt::QueuedConnection);
+        });
+        return;
+    }
 
     if      (asr.contains("播放音乐")) { emit SendCommandToMusic(MUSIC_COMMAND_SHOW); emit SendCommandToMusic(MUSIC_COMMAND_PLAY); }
     else if (asr.contains("下一首"))   { emit SendCommandToMusic(MUSIC_COMMAND_SHOW); emit SendCommandToMusic(MUSIC_COMMAND_NEXT); }

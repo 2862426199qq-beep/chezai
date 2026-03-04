@@ -92,6 +92,7 @@ private:
     QTimer             *timer;
     QNetworkAccessManager *networkManage;
     QNetworkRequest       *request;
+    bool m_aiVoicePending = false;
 };
 
 #endif

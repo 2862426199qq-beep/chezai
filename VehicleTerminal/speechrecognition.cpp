@@ -15,6 +15,7 @@ SpeechRecognition::SpeechRecognition()
     
     timer = new QTimer();
     initAudioRecord();
+    m_arecordProcess = new QProcess(this);
     initKeyRead();
     connect(timer,SIGNAL(timeout()),this,SLOT(timer_timerout()));
     
@@ -88,6 +89,27 @@ void SpeechRecognition::initKeyRead()
 void SpeechRecognition::startRecord()
 {
     qDebug()<<"start record";
+
+    m_usingArecord = false;
+    QFile::remove("./record.wav");
+
+    if (m_arecordProcess) {
+        QStringList args;
+        args << "-D" << "plughw:2,0"
+             << "-f" << "S16_LE"
+             << "-r" << "16000"
+             << "-c" << "1"
+             << "./record.wav"
+             << "-q";
+
+        m_arecordProcess->start("arecord", args);
+        if (m_arecordProcess->waitForStarted(800)) {
+            m_usingArecord = true;
+            qDebug() << "arecord started with plughw:2,0";
+            return;
+        }
+        qDebug() << "arecord start failed, fallback to QAudioRecorder";
+    }
     
     // 安全检查：确保有可用的输入设备和格式
     if(devicesVar.isEmpty() || codecsVar.isEmpty() || containersVar.isEmpty()) {
@@ -95,12 +117,23 @@ void SpeechRecognition::startRecord()
         return;
     }
     
-    m_audioRecorder->setAudioInput(devicesVar.at(0).toString());
+    QString selectedInput;
+    for (const QVariant &v : devicesVar) {
+        const QString dev = v.toString();
+        if (!dev.isEmpty()) {
+            selectedInput = dev;
+            break;
+        }
+    }
+    if (!selectedInput.isEmpty()) {
+        m_audioRecorder->setAudioInput(selectedInput);
+    }
+
     QAudioEncoderSettings settings;
     settings.setCodec(codecsVar.size() > 0 ? codecsVar.at(0).toString() : "");
     settings.setSampleRate(sampleRateVar.size() > 2 ? sampleRateVar[2].toInt() : 16000);
     settings.setBitRate(bitratesVar.size() > 0 ? bitratesVar[0].toInt() : 0);
-    settings.setChannelCount(channelsVar.size() > 1 ? channelsVar[1].toInt() : 1);
+    settings.setChannelCount(1);
     settings.setQuality(QMultimedia::EncodingQuality(
         qualityVar.size() > 0 ? qualityVar[0].toInt() : 0));
     /* 以恒定的质量录制，可选恒定的比特率 */
@@ -116,6 +149,19 @@ void SpeechRecognition::startRecord()
 /*  录音停止 并发送信号，调用对应槽函数处理  */
 void SpeechRecognition::stopRecord()
 {
+    if (m_usingArecord && m_arecordProcess) {
+        if (m_arecordProcess->state() != QProcess::NotRunning) {
+            ::kill(static_cast<pid_t>(m_arecordProcess->processId()), SIGINT);
+            if (!m_arecordProcess->waitForFinished(1500)) {
+                m_arecordProcess->kill();
+                m_arecordProcess->waitForFinished(500);
+            }
+        }
+        m_usingArecord = false;
+        emit RecordFinished();
+        return;
+    }
+
     m_audioRecorder->stop();
     emit RecordFinished();
 }

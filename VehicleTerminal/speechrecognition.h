@@ -17,6 +17,7 @@
 #include <QJsonObject>
 #include <signal.h>
 #include <QTimer>
+#include <QProcess>
 class SpeechRecognition : public QObject
 {
     Q_OBJECT
@@ -38,8 +39,10 @@ private slots:
 
 private:
     QAudioRecorder *m_audioRecorder = nullptr;
+    QProcess *m_arecordProcess = nullptr;
     QTimer *timer;
     int hasRecord = 0;
+    bool m_usingArecord = false;
     QList<QVariant>devicesVar;
     QList<QVariant>codecsVar;
     QList<QVariant>containersVar;

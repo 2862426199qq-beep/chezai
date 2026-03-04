@@ -54,6 +54,7 @@ OBJECTS_DIR   = ./
 
 SOURCES       = main.cpp \
 		mainwindow.cpp \
+		BluetoothAudio.cpp \
 		clock.cpp \
 		dht11.cpp \
 		settingwindow.cpp \
@@ -71,6 +72,7 @@ SOURCES       = main.cpp \
 		Radar/radar_reader.cpp \
 		../middleware/radar_processor.cpp qrc_img.cpp \
 		moc_mainwindow.cpp \
+		moc_BluetoothAudio.cpp \
 		moc_clock.cpp \
 		moc_dht11.cpp \
 		moc_settingwindow.cpp \
@@ -86,6 +88,7 @@ SOURCES       = main.cpp \
 		moc_radar_reader.cpp
 OBJECTS       = main.o \
 		mainwindow.o \
+		BluetoothAudio.o \
 		clock.o \
 		dht11.o \
 		settingwindow.o \
@@ -104,6 +107,7 @@ OBJECTS       = main.o \
 		radar_processor.o \
 		qrc_img.o \
 		moc_mainwindow.o \
+		moc_BluetoothAudio.o \
 		moc_clock.o \
 		moc_dht11.o \
 		moc_settingwindow.o \
@@ -119,6 +123,7 @@ OBJECTS       = main.o \
 		moc_radar_reader.o
 DIST          = Monitor/ap3216 \
 		Music/style.qss \
+		bt_audio_service.py \
 		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/features/spec_pre.prf \
 		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/common/unix.conf \
 		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/common/linux.conf \
@@ -203,6 +208,7 @@ DIST          = Monitor/ap3216 \
 		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/features/yacc.prf \
 		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/features/lex.prf \
 		VehicleTerminal.pro mainwindow.h \
+		BluetoothAudio.h \
 		clock.h \
 		dht11.h \
 		settingwindow.h \
@@ -220,6 +226,7 @@ DIST          = Monitor/ap3216 \
 		Radar/radar_reader.h \
 		../middleware/radar_processor.h main.cpp \
 		mainwindow.cpp \
+		BluetoothAudio.cpp \
 		clock.cpp \
 		dht11.cpp \
 		settingwindow.cpp \
@@ -434,8 +441,8 @@ distdir: FORCE
 	$(COPY_FILE) --parents $(DIST) $(DISTDIR)/
 	$(COPY_FILE) --parents img.qrc $(DISTDIR)/
 	$(COPY_FILE) --parents /usr/lib/aarch64-linux-gnu/qt5/mkspecs/features/data/dummy.cpp $(DISTDIR)/
-	$(COPY_FILE) --parents mainwindow.h clock.h dht11.h settingwindow.h speechrecognition.h Map/baidumap.h Map/gps.h Map/uart.h Monitor/ap3216.h Monitor/capture_thread.h Monitor/monitor.h Music/musicplayer.h Music/searchmusic.h Weather/weather.h Radar/radar_widget.h Radar/radar_reader.h ../middleware/radar_processor.h $(DISTDIR)/
-	$(COPY_FILE) --parents main.cpp mainwindow.cpp clock.cpp dht11.cpp settingwindow.cpp speechrecognition.cpp Map/baidumap.cpp Map/gps.c Map/uart.c Monitor/ap3216.cpp Monitor/capture_thread.cpp Monitor/monitor.cpp Music/musicplayer.cpp Music/searchmusic.cpp Weather/weather.cpp Radar/radar_widget.cpp Radar/radar_reader.cpp ../middleware/radar_processor.cpp $(DISTDIR)/
+	$(COPY_FILE) --parents mainwindow.h BluetoothAudio.h clock.h dht11.h settingwindow.h speechrecognition.h Map/baidumap.h Map/gps.h Map/uart.h Monitor/ap3216.h Monitor/capture_thread.h Monitor/monitor.h Music/musicplayer.h Music/searchmusic.h Weather/weather.h Radar/radar_widget.h Radar/radar_reader.h ../middleware/radar_processor.h $(DISTDIR)/
+	$(COPY_FILE) --parents main.cpp mainwindow.cpp BluetoothAudio.cpp clock.cpp dht11.cpp settingwindow.cpp speechrecognition.cpp Map/baidumap.cpp Map/gps.c Map/uart.c Monitor/ap3216.cpp Monitor/capture_thread.cpp Monitor/monitor.cpp Music/musicplayer.cpp Music/searchmusic.cpp Weather/weather.cpp Radar/radar_widget.cpp Radar/radar_reader.cpp ../middleware/radar_processor.cpp $(DISTDIR)/
 	$(COPY_FILE) --parents clock.ui settingwindow.ui Map/baidumap.ui Monitor/monitor.ui Music/musicplayer.ui Music/searchmusic.ui Weather/weather.ui $(DISTDIR)/
 
 
@@ -525,10 +532,11 @@ compiler_moc_predefs_clean:
 moc_predefs.h: /usr/lib/aarch64-linux-gnu/qt5/mkspecs/features/data/dummy.cpp
 	g++ -pipe -O2 -std=gnu++1y -Wall -W -dM -E -o moc_predefs.h /usr/lib/aarch64-linux-gnu/qt5/mkspecs/features/data/dummy.cpp
 
-compiler_moc_header_make_all: moc_mainwindow.cpp moc_clock.cpp moc_dht11.cpp moc_settingwindow.cpp moc_speechrecognition.cpp moc_baidumap.cpp moc_ap3216.cpp moc_capture_thread.cpp moc_monitor.cpp moc_musicplayer.cpp moc_searchmusic.cpp moc_weather.cpp moc_radar_widget.cpp moc_radar_reader.cpp
+compiler_moc_header_make_all: moc_mainwindow.cpp moc_BluetoothAudio.cpp moc_clock.cpp moc_dht11.cpp moc_settingwindow.cpp moc_speechrecognition.cpp moc_baidumap.cpp moc_ap3216.cpp moc_capture_thread.cpp moc_monitor.cpp moc_musicplayer.cpp moc_searchmusic.cpp moc_weather.cpp moc_radar_widget.cpp moc_radar_reader.cpp
 compiler_moc_header_clean:
-	-$(DEL_FILE) moc_mainwindow.cpp moc_clock.cpp moc_dht11.cpp moc_settingwindow.cpp moc_speechrecognition.cpp moc_baidumap.cpp moc_ap3216.cpp moc_capture_thread.cpp moc_monitor.cpp moc_musicplayer.cpp moc_searchmusic.cpp moc_weather.cpp moc_radar_widget.cpp moc_radar_reader.cpp
+	-$(DEL_FILE) moc_mainwindow.cpp moc_BluetoothAudio.cpp moc_clock.cpp moc_dht11.cpp moc_settingwindow.cpp moc_speechrecognition.cpp moc_baidumap.cpp moc_ap3216.cpp moc_capture_thread.cpp moc_monitor.cpp moc_musicplayer.cpp moc_searchmusic.cpp moc_weather.cpp moc_radar_widget.cpp moc_radar_reader.cpp
 moc_mainwindow.cpp: mainwindow.h \
+		BluetoothAudio.h \
 		settingwindow.h \
 		clock.h \
 		dht11.h \
@@ -547,6 +555,11 @@ moc_mainwindow.cpp: mainwindow.h \
 		moc_predefs.h \
 		/usr/lib/qt5/bin/moc
 	/usr/lib/qt5/bin/moc $(DEFINES) --include /home/cat/chezai/VehicleTerminal/moc_predefs.h -I/usr/lib/aarch64-linux-gnu/qt5/mkspecs/linux-g++ -I/home/cat/chezai/VehicleTerminal -I/home/cat/chezai/middleware -I/home/cat/chezai/ai_voice/include -I/usr/include/aarch64-linux-gnu/qt5 -I/usr/include/aarch64-linux-gnu/qt5/QtMultimedia -I/usr/include/aarch64-linux-gnu/qt5/QtWidgets -I/usr/include/aarch64-linux-gnu/qt5/QtGui -I/usr/include/aarch64-linux-gnu/qt5/QtNetwork -I/usr/include/aarch64-linux-gnu/qt5/QtConcurrent -I/usr/include/aarch64-linux-gnu/qt5/QtCore -I/usr/include/c++/9 -I/usr/include/aarch64-linux-gnu/c++/9 -I/usr/include/c++/9/backward -I/usr/lib/gcc/aarch64-linux-gnu/9/include -I/usr/local/include -I/usr/include/aarch64-linux-gnu -I/usr/include mainwindow.h -o moc_mainwindow.cpp
+
+moc_BluetoothAudio.cpp: BluetoothAudio.h \
+		moc_predefs.h \
+		/usr/lib/qt5/bin/moc
+	/usr/lib/qt5/bin/moc $(DEFINES) --include /home/cat/chezai/VehicleTerminal/moc_predefs.h -I/usr/lib/aarch64-linux-gnu/qt5/mkspecs/linux-g++ -I/home/cat/chezai/VehicleTerminal -I/home/cat/chezai/middleware -I/home/cat/chezai/ai_voice/include -I/usr/include/aarch64-linux-gnu/qt5 -I/usr/include/aarch64-linux-gnu/qt5/QtMultimedia -I/usr/include/aarch64-linux-gnu/qt5/QtWidgets -I/usr/include/aarch64-linux-gnu/qt5/QtGui -I/usr/include/aarch64-linux-gnu/qt5/QtNetwork -I/usr/include/aarch64-linux-gnu/qt5/QtConcurrent -I/usr/include/aarch64-linux-gnu/qt5/QtCore -I/usr/include/c++/9 -I/usr/include/aarch64-linux-gnu/c++/9 -I/usr/include/c++/9/backward -I/usr/lib/gcc/aarch64-linux-gnu/9/include -I/usr/local/include -I/usr/include/aarch64-linux-gnu -I/usr/include BluetoothAudio.h -o moc_BluetoothAudio.cpp
 
 moc_clock.cpp: clock.h \
 		moc_predefs.h \
@@ -666,6 +679,7 @@ compiler_clean: compiler_rcc_clean compiler_moc_predefs_clean compiler_moc_heade
 ####### Compile
 
 main.o: main.cpp mainwindow.h \
+		BluetoothAudio.h \
 		settingwindow.h \
 		clock.h \
 		dht11.h \
@@ -684,6 +698,7 @@ main.o: main.cpp mainwindow.h \
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o main.o main.cpp
 
 mainwindow.o: mainwindow.cpp mainwindow.h \
+		BluetoothAudio.h \
 		settingwindow.h \
 		clock.h \
 		dht11.h \
@@ -704,6 +719,9 @@ mainwindow.o: mainwindow.cpp mainwindow.h \
 		../ai_voice/include/tts_engine.h \
 		../ai_voice/include/i_tts_engine.h
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o mainwindow.o mainwindow.cpp
+
+BluetoothAudio.o: BluetoothAudio.cpp BluetoothAudio.h
+	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o BluetoothAudio.o BluetoothAudio.cpp
 
 clock.o: clock.cpp clock.h \
 		ui_clock.h
@@ -773,6 +791,9 @@ qrc_img.o: qrc_img.cpp
 
 moc_mainwindow.o: moc_mainwindow.cpp 
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o moc_mainwindow.o moc_mainwindow.cpp
+
+moc_BluetoothAudio.o: moc_BluetoothAudio.cpp 
+	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o moc_BluetoothAudio.o moc_BluetoothAudio.cpp
 
 moc_clock.o: moc_clock.cpp 
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o moc_clock.o moc_clock.cpp

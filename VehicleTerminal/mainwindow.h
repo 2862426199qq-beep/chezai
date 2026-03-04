@@ -19,6 +19,7 @@
 #include <QTime>
 #include <QDate>
 
+#include "BluetoothAudio.h"
 #include "settingwindow.h"
 #include "clock.h"
 #include "dht11.h"
@@ -55,6 +56,10 @@ private slots:
     void onBtnSetting();
     void onBtnRadarFull();
     void onBtnAiVoice();   // AI 语音交互（DeepSeek 离线大模型，待实现）
+    void onBtnBtAudio();
+    void onBtConnected(QString deviceName);
+    void onBtDisconnected();
+    void onBtRefreshStatus();
 
 private:
     void setupUI();
@@ -72,6 +77,7 @@ private:
     QLabel *lblCpu;
     QLabel *lblNpu;
     QLabel *lblStatus;
+    QLabel *lblBtAudio;
 
     QPushButton *btnMusic;
     QPushButton *btnWeather;
@@ -80,6 +86,7 @@ private:
     QPushButton *btnSetting;
     QPushButton *btnRadarFull;
     QPushButton *btnAiVoice;
+    QPushButton *btnBtAudio;
 
     SettingWindow   settingWindow;
     BaiduMap       *baiduMap;
@@ -90,9 +97,12 @@ private:
     Dht11              *dht11;
     SpeechRecognition  *AsrThread;
     QTimer             *timer;
+    QTimer             *btStatusTimer;
     QNetworkAccessManager *networkManage;
     QNetworkRequest       *request;
+    BluetoothAudio        *btAudio;
     bool m_aiVoicePending = false;
+    bool m_btAudioEnabled = true;
 };
 
 #endif

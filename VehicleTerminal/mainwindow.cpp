@@ -69,15 +69,24 @@ MainWindow::MainWindow(QWidget *parent)
     AsrThread = new SpeechRecognition();
     AsrThread->startSpeechRecognition();
 
+    btAudio = new BluetoothAudio(this);
+    btStatusTimer = new QTimer(this);
+    btStatusTimer->setInterval(3000);
+
     setupUI();
     setupConnections();
 
     timer->start();
     dht11->start();
+    btAudio->start();
+    btStatusTimer->start();
 }
 
 MainWindow::~MainWindow()
 {
+    if (btAudio) {
+        btAudio->stop();
+    }
     delete request;
 }
 
@@ -134,6 +143,7 @@ void MainWindow::setupUI()
         btnMonitor = makeNavBtn("Monitor", "#2196f3");
         btnSetting = makeNavBtn("Setting", "#9c27b0");
         btnAiVoice = makeNavBtn("AI Voice", "#00d4ff");
+        btnBtAudio = makeNavBtn("BT Audio", "#3ddc97");
 
         navRow->addWidget(btnMusic);
         navRow->addWidget(btnWeather);
@@ -141,6 +151,7 @@ void MainWindow::setupUI()
         navRow->addWidget(btnMonitor);
         navRow->addWidget(btnSetting);
         navRow->addWidget(btnAiVoice);
+        navRow->addWidget(btnBtAudio);
 
         midCol->addWidget(camTitle);
         midCol->addWidget(cameraLabel, 1);
@@ -205,6 +216,8 @@ void MainWindow::setupUI()
         lblNpu->setStyleSheet("color: #44aaff; font-size: 14px;");
         lblStatus = new QLabel("Radar: Online");
         lblStatus->setStyleSheet("color: #00ff88; font-size: 13px;");
+        lblBtAudio = new QLabel("BT Audio: 未连接");
+        lblBtAudio->setStyleSheet("color: #44aaff; font-size: 13px;");
 
         QFrame *sep3 = new QFrame;
         sep3->setObjectName("separator");
@@ -228,6 +241,7 @@ void MainWindow::setupUI()
         rightCol->addWidget(lblCpu);
         rightCol->addWidget(lblNpu);
         rightCol->addWidget(lblStatus);
+        rightCol->addWidget(lblBtAudio);
         rightCol->addWidget(sep3);
         rightCol->addWidget(clockTitle);
         rightCol->addWidget(clockWidget, 0, Qt::AlignCenter);
@@ -284,7 +298,15 @@ void MainWindow::setupConnections()
     connect(btnMonitor,  &QPushButton::clicked, this, &MainWindow::onBtnMonitor);
     connect(btnSetting,  &QPushButton::clicked, this, &MainWindow::onBtnSetting);
     connect(btnAiVoice,  &QPushButton::clicked, this, &MainWindow::onBtnAiVoice);
+        connect(btnBtAudio,  &QPushButton::clicked, this, &MainWindow::onBtnBtAudio);
     connect(btnRadarFull,&QPushButton::clicked, this, &MainWindow::onBtnRadarFull);
+
+        connect(btAudio, &BluetoothAudio::deviceConnected,
+            this, &MainWindow::onBtConnected);
+        connect(btAudio, &BluetoothAudio::deviceDisconnected,
+            this, &MainWindow::onBtDisconnected);
+        connect(btStatusTimer, &QTimer::timeout,
+            this, &MainWindow::onBtRefreshStatus);
 }
 
 void MainWindow::on_timer_updateTime()
@@ -383,6 +405,57 @@ void MainWindow::onBtnAiVoice()
             lblStatus->setStyleSheet("color: #ff4444; font-size: 13px;");
         }
     });
+}
+
+void MainWindow::onBtnBtAudio()
+{
+    if (m_btAudioEnabled) {
+        btAudio->stop();
+        m_btAudioEnabled = false;
+        btnBtAudio->setText("BT Audio Off");
+        lblBtAudio->setText("BT Audio: 已关闭");
+        lblBtAudio->setStyleSheet("color: #999999; font-size: 13px;");
+        return;
+    }
+
+    btAudio->start();
+    m_btAudioEnabled = true;
+    btnBtAudio->setText("BT Audio");
+    onBtRefreshStatus();
+}
+
+void MainWindow::onBtConnected(QString deviceName)
+{
+    lblBtAudio->setText(QString("BT Audio: 已连接 %1").arg(deviceName));
+    lblBtAudio->setStyleSheet("color: #00ff88; font-size: 13px;");
+}
+
+void MainWindow::onBtDisconnected()
+{
+    if (!m_btAudioEnabled) {
+        return;
+    }
+    lblBtAudio->setText("BT Audio: 未连接");
+    lblBtAudio->setStyleSheet("color: #44aaff; font-size: 13px;");
+}
+
+void MainWindow::onBtRefreshStatus()
+{
+    if (!m_btAudioEnabled) {
+        return;
+    }
+
+    const QString status = btAudio->getStatus();
+    if (status.startsWith("已连接")) {
+        lblBtAudio->setText(QString("BT Audio: %1").arg(status));
+        lblBtAudio->setStyleSheet("color: #00ff88; font-size: 13px;");
+    } else if (status.contains("未连接")) {
+        lblBtAudio->setText("BT Audio: 未连接");
+        lblBtAudio->setStyleSheet("color: #44aaff; font-size: 13px;");
+    } else {
+        lblBtAudio->setText(QString("BT Audio: %1").arg(status));
+        lblBtAudio->setStyleSheet("color: #ff9800; font-size: 13px;");
+    }
 }
 
 void MainWindow::on_handleRecord()

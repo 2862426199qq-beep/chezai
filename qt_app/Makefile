@@ -14,10 +14,10 @@ EQ            = =
 
 CC            = gcc
 CXX           = g++
-DEFINES       = -DQT_NO_DEBUG -DQT_WIDGETS_LIB -DQT_GUI_LIB -DQT_CORE_LIB
+DEFINES       = -DQT_NO_DEBUG -DQT_WIDGETS_LIB -DQT_GUI_LIB -DQT_NETWORK_LIB -DQT_CORE_LIB
 CFLAGS        = -pipe -O2 -Wall -W -D_REENTRANT -fPIC $(DEFINES)
 CXXFLAGS      = -pipe -O2 -std=gnu++1y -Wall -W -D_REENTRANT -fPIC $(DEFINES)
-INCPATH       = -I. -I../middleware -isystem /usr/include/aarch64-linux-gnu/qt5 -isystem /usr/include/aarch64-linux-gnu/qt5/QtWidgets -isystem /usr/include/aarch64-linux-gnu/qt5/QtGui -isystem /usr/include/aarch64-linux-gnu/qt5/QtCore -I. -I/usr/lib/aarch64-linux-gnu/qt5/mkspecs/linux-g++
+INCPATH       = -I. -I../middleware -isystem /usr/include/aarch64-linux-gnu/qt5 -isystem /usr/include/aarch64-linux-gnu/qt5/QtWidgets -isystem /usr/include/aarch64-linux-gnu/qt5/QtGui -isystem /usr/include/aarch64-linux-gnu/qt5/QtNetwork -isystem /usr/include/aarch64-linux-gnu/qt5/QtCore -I. -I/usr/lib/aarch64-linux-gnu/qt5/mkspecs/linux-g++
 QMAKE         = /usr/lib/qt5/bin/qmake
 DEL_FILE      = rm -f
 CHK_DIR_EXISTS= test -d
@@ -40,7 +40,7 @@ DISTNAME      = radar_app1.0.0
 DISTDIR = /home/cat/chezai/qt_app/.tmp/radar_app1.0.0
 LINK          = g++
 LFLAGS        = -Wl,-O1
-LIBS          = $(SUBLIBS) /usr/lib/aarch64-linux-gnu/libQt5Widgets.so /usr/lib/aarch64-linux-gnu/libQt5Gui.so /usr/lib/aarch64-linux-gnu/libQt5Core.so /usr/lib/aarch64-linux-gnu/libGL.so -lpthread   
+LIBS          = $(SUBLIBS) /usr/lib/aarch64-linux-gnu/libQt5Widgets.so /usr/lib/aarch64-linux-gnu/libQt5Gui.so /usr/lib/aarch64-linux-gnu/libQt5Network.so /usr/lib/aarch64-linux-gnu/libQt5Core.so /usr/lib/aarch64-linux-gnu/libGL.so -lpthread   
 AR            = ar cqs
 RANLIB        = 
 SED           = sed
@@ -53,14 +53,18 @@ OBJECTS_DIR   = ./
 ####### Files
 
 SOURCES       = main.cpp \
+		BluetoothAudio.cpp \
 		radar_widget.cpp \
 		radar_reader.cpp \
-		../middleware/radar_processor.cpp moc_radar_widget.cpp \
+		../middleware/radar_processor.cpp moc_BluetoothAudio.cpp \
+		moc_radar_widget.cpp \
 		moc_radar_reader.cpp
 OBJECTS       = main.o \
+		BluetoothAudio.o \
 		radar_widget.o \
 		radar_reader.o \
 		radar_processor.o \
+		moc_BluetoothAudio.o \
 		moc_radar_widget.o \
 		moc_radar_reader.o
 DIST          = /usr/lib/aarch64-linux-gnu/qt5/mkspecs/features/spec_pre.prf \
@@ -94,6 +98,8 @@ DIST          = /usr/lib/aarch64-linux-gnu/qt5/mkspecs/features/spec_pre.prf \
 		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_input_support_private.pri \
 		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_kms_support_private.pri \
 		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_linuxaccessibility_support_private.pri \
+		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_multimedia.pri \
+		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_multimediawidgets.pri \
 		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_network.pri \
 		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_network_private.pri \
 		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_opengl.pri \
@@ -103,6 +109,10 @@ DIST          = /usr/lib/aarch64-linux-gnu/qt5/mkspecs/features/spec_pre.prf \
 		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_platformcompositor_support_private.pri \
 		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_printsupport.pri \
 		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_printsupport_private.pri \
+		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_qml.pri \
+		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_qmltest.pri \
+		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_quick.pri \
+		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_quickwidgets.pri \
 		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_service_support_private.pri \
 		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_sql.pri \
 		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_sql_private.pri \
@@ -110,6 +120,8 @@ DIST          = /usr/lib/aarch64-linux-gnu/qt5/mkspecs/features/spec_pre.prf \
 		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_testlib_private.pri \
 		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_theme_support_private.pri \
 		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_vulkan_support_private.pri \
+		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_webkit.pri \
+		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_webkitwidgets.pri \
 		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_widgets.pri \
 		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_widgets_private.pri \
 		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_xcb_qpa_lib_private.pri \
@@ -138,9 +150,11 @@ DIST          = /usr/lib/aarch64-linux-gnu/qt5/mkspecs/features/spec_pre.prf \
 		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/features/exceptions.prf \
 		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/features/yacc.prf \
 		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/features/lex.prf \
-		qt_app.pro radar_widget.h \
+		qt_app.pro BluetoothAudio.h \
+		radar_widget.h \
 		radar_reader.h \
 		../middleware/radar_processor.h main.cpp \
+		BluetoothAudio.cpp \
 		radar_widget.cpp \
 		radar_reader.cpp \
 		../middleware/radar_processor.cpp
@@ -186,6 +200,8 @@ Makefile: qt_app.pro /usr/lib/aarch64-linux-gnu/qt5/mkspecs/linux-g++/qmake.conf
 		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_input_support_private.pri \
 		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_kms_support_private.pri \
 		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_linuxaccessibility_support_private.pri \
+		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_multimedia.pri \
+		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_multimediawidgets.pri \
 		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_network.pri \
 		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_network_private.pri \
 		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_opengl.pri \
@@ -195,6 +211,10 @@ Makefile: qt_app.pro /usr/lib/aarch64-linux-gnu/qt5/mkspecs/linux-g++/qmake.conf
 		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_platformcompositor_support_private.pri \
 		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_printsupport.pri \
 		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_printsupport_private.pri \
+		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_qml.pri \
+		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_qmltest.pri \
+		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_quick.pri \
+		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_quickwidgets.pri \
 		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_service_support_private.pri \
 		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_sql.pri \
 		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_sql_private.pri \
@@ -202,6 +222,8 @@ Makefile: qt_app.pro /usr/lib/aarch64-linux-gnu/qt5/mkspecs/linux-g++/qmake.conf
 		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_testlib_private.pri \
 		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_theme_support_private.pri \
 		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_vulkan_support_private.pri \
+		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_webkit.pri \
+		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_webkitwidgets.pri \
 		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_widgets.pri \
 		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_widgets_private.pri \
 		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_xcb_qpa_lib_private.pri \
@@ -263,6 +285,8 @@ Makefile: qt_app.pro /usr/lib/aarch64-linux-gnu/qt5/mkspecs/linux-g++/qmake.conf
 /usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_input_support_private.pri:
 /usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_kms_support_private.pri:
 /usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_linuxaccessibility_support_private.pri:
+/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_multimedia.pri:
+/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_multimediawidgets.pri:
 /usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_network.pri:
 /usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_network_private.pri:
 /usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_opengl.pri:
@@ -272,6 +296,10 @@ Makefile: qt_app.pro /usr/lib/aarch64-linux-gnu/qt5/mkspecs/linux-g++/qmake.conf
 /usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_platformcompositor_support_private.pri:
 /usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_printsupport.pri:
 /usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_printsupport_private.pri:
+/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_qml.pri:
+/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_qmltest.pri:
+/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_quick.pri:
+/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_quickwidgets.pri:
 /usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_service_support_private.pri:
 /usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_sql.pri:
 /usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_sql_private.pri:
@@ -279,6 +307,8 @@ Makefile: qt_app.pro /usr/lib/aarch64-linux-gnu/qt5/mkspecs/linux-g++/qmake.conf
 /usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_testlib_private.pri:
 /usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_theme_support_private.pri:
 /usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_vulkan_support_private.pri:
+/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_webkit.pri:
+/usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_webkitwidgets.pri:
 /usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_widgets.pri:
 /usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_widgets_private.pri:
 /usr/lib/aarch64-linux-gnu/qt5/mkspecs/modules/qt_lib_xcb_qpa_lib_private.pri:
@@ -323,8 +353,8 @@ distdir: FORCE
 	@test -d $(DISTDIR) || mkdir -p $(DISTDIR)
 	$(COPY_FILE) --parents $(DIST) $(DISTDIR)/
 	$(COPY_FILE) --parents /usr/lib/aarch64-linux-gnu/qt5/mkspecs/features/data/dummy.cpp $(DISTDIR)/
-	$(COPY_FILE) --parents radar_widget.h radar_reader.h ../middleware/radar_processor.h $(DISTDIR)/
-	$(COPY_FILE) --parents main.cpp radar_widget.cpp radar_reader.cpp ../middleware/radar_processor.cpp $(DISTDIR)/
+	$(COPY_FILE) --parents BluetoothAudio.h radar_widget.h radar_reader.h ../middleware/radar_processor.h $(DISTDIR)/
+	$(COPY_FILE) --parents main.cpp BluetoothAudio.cpp radar_widget.cpp radar_reader.cpp ../middleware/radar_processor.cpp $(DISTDIR)/
 
 
 clean: compiler_clean 
@@ -356,21 +386,26 @@ compiler_moc_predefs_clean:
 moc_predefs.h: /usr/lib/aarch64-linux-gnu/qt5/mkspecs/features/data/dummy.cpp
 	g++ -pipe -O2 -std=gnu++1y -Wall -W -dM -E -o moc_predefs.h /usr/lib/aarch64-linux-gnu/qt5/mkspecs/features/data/dummy.cpp
 
-compiler_moc_header_make_all: moc_radar_widget.cpp moc_radar_reader.cpp
+compiler_moc_header_make_all: moc_BluetoothAudio.cpp moc_radar_widget.cpp moc_radar_reader.cpp
 compiler_moc_header_clean:
-	-$(DEL_FILE) moc_radar_widget.cpp moc_radar_reader.cpp
+	-$(DEL_FILE) moc_BluetoothAudio.cpp moc_radar_widget.cpp moc_radar_reader.cpp
+moc_BluetoothAudio.cpp: BluetoothAudio.h \
+		moc_predefs.h \
+		/usr/lib/qt5/bin/moc
+	/usr/lib/qt5/bin/moc $(DEFINES) --include /home/cat/chezai/qt_app/moc_predefs.h -I/usr/lib/aarch64-linux-gnu/qt5/mkspecs/linux-g++ -I/home/cat/chezai/qt_app -I/home/cat/chezai/middleware -I/usr/include/aarch64-linux-gnu/qt5 -I/usr/include/aarch64-linux-gnu/qt5/QtWidgets -I/usr/include/aarch64-linux-gnu/qt5/QtGui -I/usr/include/aarch64-linux-gnu/qt5/QtNetwork -I/usr/include/aarch64-linux-gnu/qt5/QtCore -I/usr/include/c++/9 -I/usr/include/aarch64-linux-gnu/c++/9 -I/usr/include/c++/9/backward -I/usr/lib/gcc/aarch64-linux-gnu/9/include -I/usr/local/include -I/usr/include/aarch64-linux-gnu -I/usr/include BluetoothAudio.h -o moc_BluetoothAudio.cpp
+
 moc_radar_widget.cpp: radar_widget.h \
 		radar_reader.h \
 		../middleware/radar_processor.h \
 		moc_predefs.h \
 		/usr/lib/qt5/bin/moc
-	/usr/lib/qt5/bin/moc $(DEFINES) --include /home/cat/chezai/qt_app/moc_predefs.h -I/usr/lib/aarch64-linux-gnu/qt5/mkspecs/linux-g++ -I/home/cat/chezai/qt_app -I/home/cat/chezai/middleware -I/usr/include/aarch64-linux-gnu/qt5 -I/usr/include/aarch64-linux-gnu/qt5/QtWidgets -I/usr/include/aarch64-linux-gnu/qt5/QtGui -I/usr/include/aarch64-linux-gnu/qt5/QtCore -I/usr/include/c++/9 -I/usr/include/aarch64-linux-gnu/c++/9 -I/usr/include/c++/9/backward -I/usr/lib/gcc/aarch64-linux-gnu/9/include -I/usr/local/include -I/usr/include/aarch64-linux-gnu -I/usr/include radar_widget.h -o moc_radar_widget.cpp
+	/usr/lib/qt5/bin/moc $(DEFINES) --include /home/cat/chezai/qt_app/moc_predefs.h -I/usr/lib/aarch64-linux-gnu/qt5/mkspecs/linux-g++ -I/home/cat/chezai/qt_app -I/home/cat/chezai/middleware -I/usr/include/aarch64-linux-gnu/qt5 -I/usr/include/aarch64-linux-gnu/qt5/QtWidgets -I/usr/include/aarch64-linux-gnu/qt5/QtGui -I/usr/include/aarch64-linux-gnu/qt5/QtNetwork -I/usr/include/aarch64-linux-gnu/qt5/QtCore -I/usr/include/c++/9 -I/usr/include/aarch64-linux-gnu/c++/9 -I/usr/include/c++/9/backward -I/usr/lib/gcc/aarch64-linux-gnu/9/include -I/usr/local/include -I/usr/include/aarch64-linux-gnu -I/usr/include radar_widget.h -o moc_radar_widget.cpp
 
 moc_radar_reader.cpp: radar_reader.h \
 		../middleware/radar_processor.h \
 		moc_predefs.h \
 		/usr/lib/qt5/bin/moc
-	/usr/lib/qt5/bin/moc $(DEFINES) --include /home/cat/chezai/qt_app/moc_predefs.h -I/usr/lib/aarch64-linux-gnu/qt5/mkspecs/linux-g++ -I/home/cat/chezai/qt_app -I/home/cat/chezai/middleware -I/usr/include/aarch64-linux-gnu/qt5 -I/usr/include/aarch64-linux-gnu/qt5/QtWidgets -I/usr/include/aarch64-linux-gnu/qt5/QtGui -I/usr/include/aarch64-linux-gnu/qt5/QtCore -I/usr/include/c++/9 -I/usr/include/aarch64-linux-gnu/c++/9 -I/usr/include/c++/9/backward -I/usr/lib/gcc/aarch64-linux-gnu/9/include -I/usr/local/include -I/usr/include/aarch64-linux-gnu -I/usr/include radar_reader.h -o moc_radar_reader.cpp
+	/usr/lib/qt5/bin/moc $(DEFINES) --include /home/cat/chezai/qt_app/moc_predefs.h -I/usr/lib/aarch64-linux-gnu/qt5/mkspecs/linux-g++ -I/home/cat/chezai/qt_app -I/home/cat/chezai/middleware -I/usr/include/aarch64-linux-gnu/qt5 -I/usr/include/aarch64-linux-gnu/qt5/QtWidgets -I/usr/include/aarch64-linux-gnu/qt5/QtGui -I/usr/include/aarch64-linux-gnu/qt5/QtNetwork -I/usr/include/aarch64-linux-gnu/qt5/QtCore -I/usr/include/c++/9 -I/usr/include/aarch64-linux-gnu/c++/9 -I/usr/include/c++/9/backward -I/usr/lib/gcc/aarch64-linux-gnu/9/include -I/usr/local/include -I/usr/include/aarch64-linux-gnu -I/usr/include radar_reader.h -o moc_radar_reader.cpp
 
 compiler_moc_objc_header_make_all:
 compiler_moc_objc_header_clean:
@@ -388,10 +423,14 @@ compiler_clean: compiler_moc_predefs_clean compiler_moc_header_clean
 
 ####### Compile
 
-main.o: main.cpp radar_widget.h \
+main.o: main.cpp BluetoothAudio.h \
+		radar_widget.h \
 		radar_reader.h \
 		../middleware/radar_processor.h
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o main.o main.cpp
+
+BluetoothAudio.o: BluetoothAudio.cpp BluetoothAudio.h
+	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o BluetoothAudio.o BluetoothAudio.cpp
 
 radar_widget.o: radar_widget.cpp radar_widget.h \
 		radar_reader.h \
@@ -404,6 +443,9 @@ radar_reader.o: radar_reader.cpp radar_reader.h \
 
 radar_processor.o: ../middleware/radar_processor.cpp ../middleware/radar_processor.h
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o radar_processor.o ../middleware/radar_processor.cpp
+
+moc_BluetoothAudio.o: moc_BluetoothAudio.cpp 
+	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o moc_BluetoothAudio.o moc_BluetoothAudio.cpp
 
 moc_radar_widget.o: moc_radar_widget.cpp 
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o moc_radar_widget.o moc_radar_widget.cpp

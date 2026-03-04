@@ -31,22 +31,15 @@
 
 ### 增量修复：AI 点击“没反应”问题
 - 现象：点击 `AI Voice` 后偶发无后续动作。
-- 根因：当百度接口返回空结果/错误时，`m_aiVoicePending` 未复位，后续点击被 pending 保护直接忽略。
-- 修复项：
   - 在 `getSpeechResult()` 中补齐错误分支复位：网络错误、JSON解析失败、空结果时都复位 pending。
   - 在 `on_handleRecord()` 打不开录音文件时复位 pending，并提示 `Record Failed`。
-  - 录音后状态提示补充为 `Recognizing...`、上传时提示 `Uploading...`。
-  - 百度请求参数 `format` 从 `pcm` 改为 `wav`，与 `QAudioRecorder` 生成文件格式一致。
-
 ### 增量验证
 - 命令：`cd VehicleTerminal && make -j4`
 - 结果：编译通过。
 
 ### 增量排查：RK3588S 耳麦录音链路（i.MX6ULL -> RK3588S 迁移）
 - 系统层检查结果：
-  - `arecord -l` 检测到采集设备：`card 2: rockchip-es8388, device 0`
   - `cat /proc/asound/cards` 显示 `rockchip-es8388` 驱动已加载
-  - `amixer -c 2 scontrols` 存在 `Headset Mic` / `Main Mic` / `Capture` 相关控件
 - 关键发现：
   - `arecord -D hw:2,0 -r 16000 -c 1 ...` 失败（单声道参数不被该 hw 直通模式支持）
   - `arecord -D hw:2,0 -r 16000 -c 2 ...` 成功
@@ -58,28 +51,22 @@
 
 ### 本次涉及文件
 - `speechrecognition.h`：新增 `QProcess` 成员和 `m_usingArecord` 状态
-- `speechrecognition.cpp`：新增 `arecord` 录音主路径 + Qt 录音回退
-
 ### 迁移状态结论
 - RK3588S 板端音频驱动可用，问题主要在“录音参数/接口选择”而不是驱动缺失。
-- 当前已改为适配 RK3588S 的录音调用路径，优先保证耳麦插孔可采集到可识别音频。
 
 ### 增量检查：混音器开关状态
 - `amixer -c 2 sget 'Capture Mute'` 当前为 `[off]`（疑似采集被静音）
-- `amixer -c 2 sget 'Headset Mic'` 当前为 `[on]`
 - `amixer -c 2 sget 'Main Mic'` 当前为 `[off]`
 
 ### 建议执行（耳麦场景）
 - `amixer -c 2 sset 'Capture Mute' on`
 - `amixer -c 2 sset 'Headset Mic' on`
-- `amixer -c 2 sset 'Main Mic' off`
 - 执行后可用：`arecord -D plughw:2,0 -f S16_LE -r 16000 -c 1 -d 3 /tmp/rk_mic_verify.wav`
 
 ### 增量定位：仍无法识别的根因
 - 已通过直连百度接口复现错误：`{"err_no":3302,"err_msg":"Access token invalid or no longer valid"}`。
 - 结论：当前项目内硬编码 token 已失效（时间戳对应 2024-11），即使录音正常也无法在线识别。
 
-### 新增修复（2026-03-04）
 - `mainwindow.cpp`
   - 新增 `resolveBaiduAsrToken()`：优先读取环境变量 `BAIDU_ASR_TOKEN`，为空再用旧默认值。
   - AI 模式下增加音频大小校验（过短/无效直接提示 `Audio Too Short/Invalid`）。
@@ -87,16 +74,8 @@
 - `speechrecognition.cpp`
   - `arecord` 停止由 `SIGTERM` 改为 `SIGINT`，优先保证 WAV 头正确收尾，减少上传后解析失败概率。
 
-### 使用说明（立即生效）
-- 启动前先导出新 token：
-  - `export BAIDU_ASR_TOKEN='你的新百度ASR token'`
-  - `./VehicleTerminal`
-
-### 增量执行记录（已代操作）
 - 已成功获取并保存 token 到本地文件：`VehicleTerminal/.baidu_asr_token`（权限 `600`）。
 - 已验证文件存在且长度正常（71字节）。
-- 推荐启动方式（自动注入 token）：
-  - `cd /home/cat/chezai/VehicleTerminal`
   - `BAIDU_ASR_TOKEN="$(cat .baidu_asr_token)" ./VehicleTerminal`
 
 > 说明：在无图形环境（无 DISPLAY）下启动 Qt 会报 `could not connect to display :0`，需在板子本地桌面会话中运行上述命令。
@@ -107,9 +86,36 @@
   - 在 `onBtnAiVoice()` 新增 15 秒总超时保护：超时自动复位 pending 并显示 `AI Voice: Timeout`。
   - 在 `on_handleRecord()` 新增百度请求 10 秒超时保护：请求仍运行则主动 `abort()`，触发网络错误分支。
 - 目的：避免任何录音回调/网络回调异常导致状态机永久卡死。
-
-### 验证方法
 - 启动命令：`BAIDU_ASR_TOKEN="$(cat .baidu_asr_token)" ./VehicleTerminal`
 - 点击 `AI Voice` 后观察状态：
   - 正常：`Running -> Recognizing -> Uploading -> AI Voice: OPEN_xxx`
   - 异常：最迟 15 秒内应变成 `AI Voice: Timeout` 或网络错误，不再无限卡住。
+
+  ## 2026-03-05
+
+  ### 变更：VehicleTerminal 集成蓝牙音乐（A2DP Sink）
+  - 已在 `VehicleTerminal` 内接入 `BluetoothAudio` 封装与 `bt_audio_service.py` 独立服务。
+  - 主界面新增 `BT Audio` 开关按钮与 `BT Audio: ...` 状态标签。
+  - 点击按钮可开/关蓝牙可发现；状态每 3 秒轮询，并在设备连接/断开时实时更新。
+
+  ### 如何验证本次改进（建议按层验证）
+  1. **语法检查（服务层）**
+    - `python3 -m py_compile /home/cat/chezai/VehicleTerminal/bt_audio_service.py`
+  2. **编译检查（Qt 层）**
+    - `cd /home/cat/chezai/VehicleTerminal && qmake VehicleTerminal.pro && make -j4`
+  3. **服务接口检查（协议层）**
+    - 启动服务：`python3 /home/cat/chezai/VehicleTerminal/bt_audio_service.py --socket /tmp/bt_audio_service.sock`
+    - 新开终端发请求（示例）：
+      - `{"method":"ping"}` 应返回 `{"ok":true,"result":"pong"}`
+      - `{"method":"getStatus"}` 应返回 `connected/disconnected`
+  4. **端到端检查（手机播放）**
+    - 启动应用：`cd /home/cat/chezai/VehicleTerminal && ./VehicleTerminal`
+    - 点击界面 `BT Audio`，手机连接开发板蓝牙并播放音乐。
+    - 期望结果：
+      - UI 显示 `BT Audio: 已连接 <手机名>`
+      - `pactl list short sink-inputs` 能看到蓝牙播放流
+      - 声音从 ES8388 对应输出设备播出
+
+  ### 本次已完成验证
+  - `VehicleTerminal` 全量编译已通过（含 `BluetoothAudio` 与 `moc_BluetoothAudio` 链接）。
+  - 详细技术报告见：`VehicleTerminal/BT_AUDIO_VEHICLETERMINAL_REPORT.md`。

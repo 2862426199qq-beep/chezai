@@ -15,6 +15,7 @@ LIBS += -L../ai_voice/build -lai_voice_lib -lstdc++ -lpthread
 SOURCES += \
     main.cpp \
     mainwindow.cpp \
+    BluetoothAudio.cpp \
     clock.cpp \
     dht11.cpp \
     settingwindow.cpp \
@@ -34,6 +35,7 @@ SOURCES += \
 
 HEADERS += \
     mainwindow.h \
+    BluetoothAudio.h \
     clock.h \
     dht11.h \
     settingwindow.h \
@@ -64,4 +66,5 @@ RESOURCES += img.qrc
 
 DISTFILES += \
     Monitor/ap3216 \
-    Music/style.qss
+    Music/style.qss \
+    bt_audio_service.py

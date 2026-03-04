@@ -54,6 +54,7 @@ private slots:
     void onBtnMap();
     void onBtnSetting();
     void onBtnRadarFull();
+    void onBtnAiVoice();   // AI 语音交互（DeepSeek 离线大模型，待实现）
 
 private:
     void setupUI();
@@ -78,6 +79,7 @@ private:
     QPushButton *btnMonitor;
     QPushButton *btnSetting;
     QPushButton *btnRadarFull;
+    QPushButton *btnAiVoice;
 
     SettingWindow   settingWindow;
     BaiduMap       *baiduMap;

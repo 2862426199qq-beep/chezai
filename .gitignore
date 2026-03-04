@@ -81,3 +81,4 @@ install_manifest.txt
 # ============================================================
 .DS_Store
 Thumbs.db
+deepseek/*.rkllm

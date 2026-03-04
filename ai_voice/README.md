@@ -1,8 +1,12 @@
-# ai_voice — 离线 AI 语音交互模块
+# ai_voice — 离线 AI 语音交互模块（插件化架构）
 
-基于 **whisper.cpp**（ASR）+ **DeepSeek-R1-1.5B**（LLM）+ **espeak-ng**（TTS）的完全离线车载语音交互系统。
+全离线、模块化语音交互流水线，参考 [LLM_Voice_Flow](https://github.com/superxiaobai-1/LLM_Voice_Flow) 架构设计，基于 **whisper.cpp**（ASR）+ **DeepSeek-R1-1.5B**（LLM）+ **espeak-ng**（TTS）。
 
-> 当前为 **stub 模式**：各模块均有完整结构和接口，但底层推理暂用模拟数据替代，等待 whisper.cpp / llama.cpp 依赖接入后即可激活。
+核心特性：
+- 🔌 **插件化接口**：`IAsr/ILlm/ITts Engine` 抽象接口，可随时替换底层实现
+- ⚡ **流式低延迟**：LLM `chatStream()` 边生成边推 TTS 队列（`VoicePipeline::runStream`）
+- 🔁 **双缓冲 TTS 队列**：`TtsEngine` 内置生产者-消费者队列，LLM 生成一句立刻播一句
+- 🔧 **可激活真实模型**：通过 CMake `-DUSE_REAL_MODELS=ON` 切换，无需修改代码
 
 ---
 
@@ -11,16 +15,41 @@
 ```
 ai_voice/
 ├── include/
-│   ├── local_asr.h     # 离线语音识别接口（whisper.cpp）
-│   ├── llm_engine.h    # LLM 推理引擎接口（llama.cpp + DeepSeek）
-│   └── tts_engine.h    # 离线 TTS 接口（espeak-ng）
+│   ├── i_asr_engine.h      # 抽象 ASR 接口（插件基类）
+│   ├── i_llm_engine.h      # 抽象 LLM 接口（插件基类，含 chatStream）
+│   ├── i_tts_engine.h      # 抽象 TTS 接口（插件基类，含 enqueue/waitDone）
+│   ├── voice_pipeline.h    # 全链路编排器（run / runStream）
+│   ├── local_asr.h         # LocalASR  实现（whisper.cpp）
+│   ├── llm_engine.h        # LlmEngine 实现（llama.cpp + DeepSeek）
+│   └── tts_engine.h        # TtsEngine 实现（espeak-ng + 双缓冲队列）
 ├── src/
-│   ├── local_asr.cpp   # ASR 实现（stub + TODO 注释）
-│   ├── llm_engine.cpp  # LLM 实现（stub + 意图解析）
-│   ├── tts_engine.cpp  # TTS 实现（espeak-ng system 调用）
-│   └── main.cpp        # 完整链路测试程序
+│   ├── voice_pipeline.cpp  # 流水线逻辑（批量模式 + 流式模式）
+│   ├── local_asr.cpp       # ASR：stub 或真实 whisper.cpp 推理
+│   ├── llm_engine.cpp      # LLM：stub 或真实 llama.cpp 流式推理
+│   ├── tts_engine.cpp      # TTS：espeak-ng + 工作线程队列
+│   └── main.cpp            # 完整链路测试程序
 ├── CMakeLists.txt
 └── README.md
+```
+
+## 数据流（流式模式）
+
+```
+麦克风/WAV
+    │
+    ▼ IAsrEngine::transcribeStream()
+ASR (whisper.cpp)
+    │ 逐段文字 → 拼接完整 utterance
+    ▼ ILlmEngine::chatStream(token_callback)
+LLM (DeepSeek-R1-1.5B)
+    │ 每 token 回调 → 检测句末标点 → 入队
+    ▼ ITtsEngine::enqueue(sentence)
+TTS 双缓冲队列
+    │ 工作线程消费队列 → 逐句播报
+    ▼ espeak-ng（本地离线）
+耳机/扬声器
+
+延迟目标：首句播出 < 2s（RK3588S，4线程推理）
 ```
 
 ---
@@ -31,34 +60,11 @@ ai_voice/
 |------|------|---------|
 | [whisper.cpp](https://github.com/ggerganov/whisper.cpp) | 离线中文 ASR | 源码编译 |
 | [llama.cpp](https://github.com/ggerganov/llama.cpp) | DeepSeek 端侧推理 | 源码编译 |
-| espeak-ng | 中文 TTS 语音播报 | `apt install espeak-ng` |
-| espeak-ng-data | 中文语音数据 | `apt install espeak-ng-data` |
+| espeak-ng | 中文 TTS | `apt install espeak-ng` |
 
 ---
 
-## 模型下载
-
-### whisper.cpp 模型（中文 ASR）
-
-```bash
-# 推荐：small 量化版（~50MB，适合 RK3588S）
-cd models/
-wget https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small-q5_1.bin
-```
-
-### DeepSeek-R1-1.5B GGUF 模型（端侧 LLM）
-
-```bash
-# Q4 量化版（~1GB，6TOPS NPU 可加速）
-# 从 Hugging Face 下载
-huggingface-cli download bartowski/DeepSeek-R1-Distill-Qwen-1.5B-GGUF \
-    DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf \
-    --local-dir models/
-```
-
----
-
-## 编译（stub 模式，无需真实依赖）
+## 编译（Stub 模式，无需真实依赖）
 
 ```bash
 cd ai_voice/
@@ -66,49 +72,57 @@ mkdir build && cd build
 cmake ..
 make -j$(nproc)
 
-# 运行测试
-./ai_voice_test
-# 或指定 WAV 文件
-./ai_voice_test /path/to/audio.wav
+./ai_voice_test                # 使用内置 stub 数据
+./ai_voice_test /path/to.wav   # 指定 WAV 文件（stub 模式忽略文件内容）
 ```
 
-## 编译（完整模式，接入 whisper.cpp + llama.cpp）
+## 编译（真实模型模式）
+
+### 1. 准备依赖
 
 ```bash
-# 1. 编译 whisper.cpp
+# 编译 whisper.cpp
 git clone https://github.com/ggerganov/whisper.cpp.git
 cd whisper.cpp && mkdir build && cd build
-cmake .. -DWHISPER_BUILD_SHARED_LIBS=OFF
-make -j$(nproc)
+cmake .. && make -j$(nproc)
 cd ../../
 
-# 2. 编译 llama.cpp（RK3588S 可启用 RKNN NPU 加速）
+# 编译 llama.cpp
 git clone https://github.com/ggerganov/llama.cpp.git
 cd llama.cpp && mkdir build && cd build
-cmake .. -DGGML_RKNN=ON  # 可选：启用 RKNN NPU
-make -j$(nproc)
+cmake .. && make -j$(nproc)
 cd ../../
-
-# 3. 编译 ai_voice（指定依赖路径）
-cd ai_voice/build
-cmake .. \
-    -DWHISPER_DIR=../../whisper.cpp \
-    -DLLAMA_DIR=../../llama.cpp
-# 并取消 CMakeLists.txt 中对应的注释行
-make -j$(nproc)
 ```
 
----
-
-## 测试
+### 2. 下载模型
 
 ```bash
-# stub 模式测试（无需真实音频）
-./ai_voice_test
+mkdir -p models/
 
-# 真实音频测试（需要 16kHz 单声道 WAV）
-# 录制测试音频
+# whisper small 量化版（~50MB）
+wget -P models/ \
+  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small-q5_1.bin
+
+# DeepSeek-R1-1.5B Q4 量化版（~1GB）
+pip install huggingface_hub
+huggingface-cli download bartowski/DeepSeek-R1-Distill-Qwen-1.5B-GGUF \
+    DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf --local-dir models/
+```
+
+### 3. 编译并运行
+
+```bash
+cd ai_voice/build
+cmake .. \
+    -DUSE_REAL_MODELS=ON \
+    -DWHISPER_DIR=../../whisper.cpp \
+    -DLLAMA_DIR=../../llama.cpp
+make -j$(nproc)
+
+# 录制测试音频（3秒）
 arecord -f S16_LE -r 16000 -c 1 -d 3 test.wav
+
+# 运行完整流水线
 ./ai_voice_test test.wav
 ```
 
@@ -116,40 +130,61 @@ arecord -f S16_LE -r 16000 -c 1 -d 3 test.wav
 
 ## 集成到 VehicleTerminal Qt 主程序
 
-1. 在 `VehicleTerminal.pro` 中添加：
-   ```qmake
-   LIBS += -L../ai_voice/build -lai_voice_lib -lstdc++ -lpthread
-   INCLUDEPATH += ../ai_voice/include
-   ```
+`VehicleTerminal/mainwindow.h` 已预留 `onBtnAiVoice()` 槽和 `btnAiVoice` 按钮。
 
-2. 在 `mainwindow.h` 中已预留 `onBtnAiVoice()` 槽和 `btnAiVoice` 按钮。
+### Qt 集成示例
 
-3. 在 `mainwindow.cpp` 的 `onBtnAiVoice()` 中调用：
-   ```cpp
-   // 示例：异步启动语音识别 → LLM → 意图执行
-   QtConcurrent::run([this]() {
-       LocalASR asr;
-       LlmEngine llm;
-       TtsEngine tts;
-       asr.init("models/ggml-small-q5_1.bin");
-       llm.init("models/DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf");
-       std::string text    = asr.transcribe("/tmp/record.wav");
-       std::string reply   = llm.chat(text);
-       std::string intent  = llm.parseIntent(reply);
-       tts.speakAsync(reply);
-       // 根据 intent 发送 Qt 信号触发对应界面
-   });
-   ```
+在 `VehicleTerminal.pro` 中添加：
+```qmake
+LIBS        += -L../ai_voice/build -lai_voice_lib -lstdc++ -lpthread
+INCLUDEPATH += ../ai_voice/include
+```
+
+在 `mainwindow.cpp` 的 `onBtnAiVoice()` 中调用：
+```cpp
+#include "local_asr.h"
+#include "llm_engine.h"
+#include "tts_engine.h"
+#include "voice_pipeline.h"
+
+void MainWindow::onBtnAiVoice()
+{
+    // 使用 QtConcurrent 避免阻塞 UI 线程
+    QtConcurrent::run([this]() {
+        LocalASR  asr;
+        LlmEngine llm;
+        TtsEngine tts;
+
+        asr.init("models/ggml-small-q5_1.bin");
+        llm.init("models/DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf", 4);
+
+        VoicePipeline pipeline(asr, llm, tts);
+        pipeline.setIntentHandler([this](const std::string &intent,
+                                         const std::string &) {
+            // 回到 Qt 主线程执行 UI 操作
+            QMetaObject::invokeMethod(this, [this, intent]() {
+                if      (intent == "OPEN_MUSIC")   emit SendCommandToMusic(1);
+                else if (intent == "OPEN_MAP")     emit SendCommandToMap(1);
+                else if (intent == "OPEN_MONITOR") emit SendCommandToMonitor(1);
+                else if (intent == "OPEN_WEATHER") { /* 切换天气界面 */ }
+            }, Qt::QueuedConnection);
+        });
+
+        pipeline.runStream("/tmp/record.wav");
+    });
+}
+```
 
 ---
 
-## 语音意图说明
+## 意图列表
 
 | 意图 | 触发词示例 | Qt 动作 |
 |------|----------|---------|
-| `OPEN_MUSIC` | 打开音乐、播放歌曲 | `emit SendCommandToMusic(1)` |
-| `OPEN_MAP` | 打开地图、导航 | `emit SendCommandToMap(1)` |
-| `OPEN_WEATHER` | 查天气 | 切换到天气界面 |
+| `OPEN_MUSIC`   | 打开音乐、播放歌曲 | `emit SendCommandToMusic(1)` |
+| `OPEN_MAP`     | 打开地图、导航 | `emit SendCommandToMap(1)` |
+| `OPEN_WEATHER` | 查天气 | 切换天气界面 |
 | `OPEN_MONITOR` | 倒车、摄像头 | `emit SendCommandToMonitor(1)` |
-| `READ_TEMP` | 温度、温湿度 | 读取 DHT11 传感器 |
-| `UNKNOWN` | 其他 | TTS 提示无法理解 |
+| `READ_TEMP`    | 温度、温湿度 | 读取 DHT11 |
+| `UNKNOWN`      | 其他 | TTS 提示 |
+

@@ -15,7 +15,7 @@ void Dht11::run()
 {
    QString humidity, temp;
 
-#if (defined(__arm__) || defined(__aarch64__)) && !defined(DISABLE_HARDWARE)
+#if defined(__arm__) || defined(__aarch64__)
    unsigned char date[5]={0};
    unsigned char tmp=0;
    int ret;
@@ -37,6 +37,7 @@ void Dht11::run()
    while (1) {
        if((ret = read(fd, date, sizeof(date))) != sizeof(date))
        {
+           usleep(3000000);  /* 读取失败退避 3 秒, DHT11 规格要求至少 1s 间隔 */
            continue;
        }
        tmp = 0;
@@ -55,7 +56,7 @@ void Dht11::run()
            temp = "error";
        }
        emit updateDht11Data(humidity, temp);
-       usleep(500000);
+       usleep(2000000);  /* 正常读取间隔 2 秒 (DHT11 规格最小 1s) */
    }
 #else
     // DISABLE_HARDWARE模式或非ARM平台，使用模拟数据

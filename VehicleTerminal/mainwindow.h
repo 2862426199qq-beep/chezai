@@ -19,7 +19,6 @@
 #include <QTime>
 #include <QDate>
 
-#include "BluetoothAudio.h"
 #include "settingwindow.h"
 #include "clock.h"
 #include "dht11.h"
@@ -29,6 +28,10 @@
 #include "Monitor/monitor.h"
 #include "speechrecognition.h"
 #include "Radar/radar_widget.h"
+#include "camera_thread.h"
+#include "voice_assistant.h"
+#include "mjpeg_server.h"
+#include "rtmp_streamer.h"
 
 
 class MainWindow : public QMainWindow
@@ -55,12 +58,15 @@ private slots:
     void onBtnMap();
     void onBtnSetting();
     void onBtnRadarFull();
-    void onBtnAiVoice();   // AI 语音交互（DeepSeek 离线大模型，待实现）
-    void onBtnBtAudio();
-    void onBtConnected(QString deviceName);
-    void onBtDisconnected();
-    void onBtRefreshStatus();
-
+    void onBtnAiVoice();   // AI 语音交互（Whisper + Qwen2.5 离线语音链路）
+    void onVoiceStatus(const QString &status);
+    void onVoiceStt(const QString &text);
+    void onVoiceAction(const QString &action, const QString &param);
+    void onVoiceError(const QString &msg);
+    void onVoiceFinished();
+    void dispatchVoiceAction(const QString &action, const QString &param);
+    void onBtnCameraToggle();  // 摄像头开关
+    void onBtnCapture();  // 抓拍功能：采集当前帧，保存为 PNG 图片到本地
 private:
     void setupUI();
     void setupConnections();
@@ -77,7 +83,6 @@ private:
     QLabel *lblCpu;
     QLabel *lblNpu;
     QLabel *lblStatus;
-    QLabel *lblBtAudio;
 
     QPushButton *btnMusic;
     QPushButton *btnWeather;
@@ -86,7 +91,9 @@ private:
     QPushButton *btnSetting;
     QPushButton *btnRadarFull;
     QPushButton *btnAiVoice;
-    QPushButton *btnBtAudio;
+    QPushButton *btnCameraToggle;
+    QPushButton *btnCapture;  // 抓拍按钮
+    QImage lastFrame; 
 
     SettingWindow   settingWindow;
     BaiduMap       *baiduMap;
@@ -94,15 +101,19 @@ private:
     Weather        *weather;
     Monitor        *monitor;
 
+    CameraThread       *cameraThread;
     Dht11              *dht11;
     SpeechRecognition  *AsrThread;
     QTimer             *timer;
-    QTimer             *btStatusTimer;
     QNetworkAccessManager *networkManage;
     QNetworkRequest       *request;
-    BluetoothAudio        *btAudio;
+    VoiceAssistant     *m_voiceAssistant = nullptr;
+    MjpegServer        *m_mjpegServer = nullptr;
+    RtmpStreamer        *m_rtmpStreamer = nullptr;
     bool m_aiVoicePending = false;
-    bool m_btAudioEnabled = true;
+    bool cameraRunning = true;  // 摄像头默认开启
+    QString m_lastSttText;
+    QString m_lastLlmJson;
 };
 
 #endif

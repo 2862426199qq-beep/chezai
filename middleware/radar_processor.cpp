@@ -37,8 +37,10 @@ std::vector<RadarTarget> RadarProcessor::process(
 
     std::vector<Complex> fft_data(N_SAMPLES);
     for (int n = 0; n < N_SAMPLES; n++) {
-        fft_data[n] = Complex(static_cast<double>(raw_iq[n].i),
-                              static_cast<double>(raw_iq[n].q));
+        /* Hann 窗：减小旁瓣，避免强近场信号泄漏到远距离 bin */
+        double w = 0.5 * (1.0 - std::cos(2.0 * M_PI * n / (N_SAMPLES - 1)));
+        fft_data[n] = Complex(static_cast<double>(raw_iq[n].i) * w,
+                              static_cast<double>(raw_iq[n].q) * w);
     }
 
     fft(fft_data);
@@ -111,7 +113,11 @@ std::vector<RadarTarget> RadarProcessor::cfar_detect(
     double threshold_factor = std::pow(10.0, cfar_params_.threshold_dB / 20.0);
     int half_n = N_SAMPLES / 2;
 
-    for (int i = 1; i < half_n; i++) {
+    /* 跳过 bin 0-1（DC/近场耦合），限制上界（避免右侧训练格不足造成误报） */
+    int i_start = 2;
+    int i_end   = half_n - guard - train - 1;   /* = 25，保证两侧训练格完整 */
+
+    for (int i = i_start; i <= i_end; i++) {
         double noise_sum = 0.0;
         int noise_count = 0;
         for (int j = i - window; j <= i - guard - 1; j++) {

@@ -8,18 +8,27 @@ TARGET   = VehicleTerminal
 TEMPLATE = app
 
 INCLUDEPATH += ../middleware
-INCLUDEPATH += ../ai_voice/include
 
-LIBS += -L../ai_voice/build -lai_voice_lib -lstdc++ -lpthread
+# RGA 硬件加速（与 camera_thread.h 中的 USE_RGA 宏配套）
+INCLUDEPATH += /usr/include/rga
+LIBS += -lrga
+
+# MPP 硬件 H.264 编码 + ffmpeg RTMP 推流
+INCLUDEPATH += /usr/include/rockchip
+LIBS += -lrockchip_mpp
+LIBS += -lavformat -lavcodec -lavutil
 
 SOURCES += \
     main.cpp \
     mainwindow.cpp \
-    BluetoothAudio.cpp \
     clock.cpp \
     dht11.cpp \
     settingwindow.cpp \
     speechrecognition.cpp \
+    camera_thread.cpp \
+    voice_assistant.cpp \
+    mjpeg_server.cpp \
+    rtmp_streamer.cpp \
     Map/baidumap.cpp \
     Map/gps.c \
     Map/uart.c \
@@ -27,6 +36,7 @@ SOURCES += \
     Monitor/capture_thread.cpp \
     Monitor/monitor.cpp \
     Music/musicplayer.cpp \
+    Music/music_worker.cpp \
     Music/searchmusic.cpp \
     Weather/weather.cpp \
     Radar/radar_widget.cpp \
@@ -35,11 +45,14 @@ SOURCES += \
 
 HEADERS += \
     mainwindow.h \
-    BluetoothAudio.h \
     clock.h \
     dht11.h \
     settingwindow.h \
     speechrecognition.h \
+    camera_thread.h \
+    voice_assistant.h \
+    mjpeg_server.h \
+    rtmp_streamer.h \
     Map/baidumap.h \
     Map/gps.h \
     Map/uart.h \
@@ -47,6 +60,7 @@ HEADERS += \
     Monitor/capture_thread.h \
     Monitor/monitor.h \
     Music/musicplayer.h \
+    Music/music_worker.h \
     Music/searchmusic.h \
     Weather/weather.h \
     Radar/radar_widget.h \
@@ -66,5 +80,4 @@ RESOURCES += img.qrc
 
 DISTFILES += \
     Monitor/ap3216 \
-    Music/style.qss \
-    bt_audio_service.py
+    Music/style.qss

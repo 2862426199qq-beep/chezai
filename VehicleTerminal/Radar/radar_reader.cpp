@@ -74,6 +74,8 @@ void RadarReader::run()
     int data_len = 0;
     RadarProcessor processor;
     double sim_angle = 0.0;
+    uint16_t local_seq = 0;  /* 本地帧计数器，替代从帧中读取（硬件无帧序号字段） */
+    qint64 last_angle_ms = 0; /* 限速：最快每 33ms 推进一次角度，防止过快旋转 */
 
     while (m_running) {
         int space = BUFFER_SIZE - data_len;
@@ -100,25 +102,27 @@ void RadarReader::run()
             if (data_len < FRAME_SIZE) break;
 
             IQPoint  *raw_iq    = reinterpret_cast<IQPoint*>(&rx_buf[4]);
-            uint16_t  frame_seq = *reinterpret_cast<uint16_t*>(&rx_buf[260]);
+            uint16_t  frame_seq = local_seq++;  /* 每帧递增，硬件无序号字段 */
 
             auto targets = processor.process(raw_iq, frame_seq, sim_angle);
 
             if (processor.is_new_frame()) {
-                sim_angle += 6.0;
-                if (sim_angle >= 360.0) sim_angle -= 360.0;
-
                 qint64 now = QDateTime::currentMSecsSinceEpoch();
+                if (now - last_angle_ms >= 33) {  /* 限速 ~30次/秒，1转/2秒 */
+                    sim_angle += 6.0;
+                    if (sim_angle >= 360.0) sim_angle -= 360.0;
+                    last_angle_ms = now;
 
-                m_mutex.lock();
-                m_scanAngle = sim_angle;
-                if (!targets.empty()) {
-                    addTargets(targets, now);
+                    m_mutex.lock();
+                    m_scanAngle = sim_angle;
+                    if (!targets.empty()) {
+                        addTargets(targets, now);
+                    }
+                    pruneOld(now);
+                    m_mutex.unlock();
+
+                    emit newFrame(sim_angle);
                 }
-                pruneOld(now);
-                m_mutex.unlock();
-
-                emit newFrame(sim_angle);
             }
 
             std::memmove(rx_buf, rx_buf + FRAME_SIZE, data_len - FRAME_SIZE);

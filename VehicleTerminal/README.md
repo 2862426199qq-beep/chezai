@@ -91,31 +91,9 @@
   - 正常：`Running -> Recognizing -> Uploading -> AI Voice: OPEN_xxx`
   - 异常：最迟 15 秒内应变成 `AI Voice: Timeout` 或网络错误，不再无限卡住。
 
-  ## 2026-03-05
+## 2026-03-05
 
-  ### 变更：VehicleTerminal 集成蓝牙音乐（A2DP Sink）
-  - 已在 `VehicleTerminal` 内接入 `BluetoothAudio` 封装与 `bt_audio_service.py` 独立服务。
-  - 主界面新增 `BT Audio` 开关按钮与 `BT Audio: ...` 状态标签。
-  - 点击按钮可开/关蓝牙可发现；状态每 3 秒轮询，并在设备连接/断开时实时更新。
-
-  ### 如何验证本次改进（建议按层验证）
-  1. **语法检查（服务层）**
-    - `python3 -m py_compile /home/cat/chezai/VehicleTerminal/bt_audio_service.py`
-  2. **编译检查（Qt 层）**
-    - `cd /home/cat/chezai/VehicleTerminal && qmake VehicleTerminal.pro && make -j4`
-  3. **服务接口检查（协议层）**
-    - 启动服务：`python3 /home/cat/chezai/VehicleTerminal/bt_audio_service.py --socket /tmp/bt_audio_service.sock`
-    - 新开终端发请求（示例）：
-      - `{"method":"ping"}` 应返回 `{"ok":true,"result":"pong"}`
-      - `{"method":"getStatus"}` 应返回 `connected/disconnected`
-  4. **端到端检查（手机播放）**
-    - 启动应用：`cd /home/cat/chezai/VehicleTerminal && ./VehicleTerminal`
-    - 点击界面 `BT Audio`，手机连接开发板蓝牙并播放音乐。
-    - 期望结果：
-      - UI 显示 `BT Audio: 已连接 <手机名>`
-      - `pactl list short sink-inputs` 能看到蓝牙播放流
-      - 声音从 ES8388 对应输出设备播出
-
-  ### 本次已完成验证
-  - `VehicleTerminal` 全量编译已通过（含 `BluetoothAudio` 与 `moc_BluetoothAudio` 链接）。
-  - 详细技术报告见：`VehicleTerminal/BT_AUDIO_VEHICLETERMINAL_REPORT.md`。
+### 变更：移除蓝牙相关功能
+- 由于当前硬件方案不使用蓝牙芯片，已从 `VehicleTerminal` 移除全部蓝牙相关代码与文档。
+- 已删除：`BluetoothAudio` 封装、`Bluetooth/` 目录下服务脚本与验证脚本、蓝牙专项报告。
+- 已回退主界面中的 `BT Audio` 按钮与状态显示，保留非蓝牙功能不受影响。

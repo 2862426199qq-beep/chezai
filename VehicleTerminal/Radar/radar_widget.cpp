@@ -159,19 +159,11 @@ void RadarWidget::drawTargets(QPainter &p, QPointF center, double scale)
 
         QPointF pos = polarToScreen(pt.range_m, pt.angle_deg, center, scale);
 
-        /* 目标点 */
-        double dotSize = 4.0 + 6.0 * fade;
+        /* 目标点：固定小圆点，越新越亮 */
+        double dotSize = 3.0;
         p.setPen(Qt::NoPen);
         p.setBrush(color);
         p.drawEllipse(pos, dotSize, dotSize);
-
-        /* 光晕效果（最近 1 秒的点） */
-        if (age < 1000) {
-            QColor glow = color;
-            glow.setAlpha(alpha / 3);
-            p.setBrush(glow);
-            p.drawEllipse(pos, dotSize * 2, dotSize * 2);
-        }
 
         /* 标注文字（只对最新的点显示） */
         if (age < 200) {

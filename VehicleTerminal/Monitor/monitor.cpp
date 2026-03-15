@@ -126,15 +126,8 @@ void Monitor::startCaptureButtonClicked(bool start)
 
 void Monitor::on_timer_timeout()
 {
-    static int timerCount = 0;
-    printf("Monitor::on_timer_timeout called (%d)\n", ++timerCount);
-    fflush(stdout);
-    
     QString str = QString("距离: %1").arg(ap3216->readPsData());
     this->showDistance->setText(str);
-    
-    printf("Monitor::on_timer_timeout complete\n");
-    fflush(stdout);
 }
 
 void Monitor::on_handleCommand(int command)

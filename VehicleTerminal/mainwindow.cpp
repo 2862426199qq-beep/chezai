@@ -4,9 +4,7 @@
 #include <QMetaObject>
 #include <QProcessEnvironment>
 
-#include "llm_engine.h"
-#include "tts_engine.h"
-
+#include <QDateTime>
 static const char* DARK_STYLE = R"(
     QMainWindow {
         background-color: #1a1a2e;
@@ -66,27 +64,41 @@ MainWindow::MainWindow(QWidget *parent)
     request->setHeader(QNetworkRequest::ContentTypeHeader,
                        QVariant("application/json"));
 
+    // Legacy ASR thread is kept for backward compatibility but not started.
+    // VoiceAssistant owns the new Whisper + Qwen pipeline and should be the only recorder path.
     AsrThread = new SpeechRecognition();
-    AsrThread->startSpeechRecognition();
 
-    btAudio = new BluetoothAudio(this);
-    btStatusTimer = new QTimer(this);
-    btStatusTimer->setInterval(3000);
+    cameraThread = new CameraThread(this);
+
+    m_voiceAssistant = new VoiceAssistant(this);
+    m_voiceAssistant->preInitAudio();   // 启动时异步预热音频，首次语音不再等待
+    m_voiceAssistant->preInitLlm();     // 启动时后台预加载 LLM 模型(~10s)，首次语音不再等待
+
+    m_mjpegServer = new MjpegServer(8080, this);
+
+    // RTMP 推流：传入 RTMP 服务器地址（为空则不推流，仅初始化编码器）
+    // 使用前需修改为实际 RTMP 地址，如 "rtmp://你的PC-IP/live/camera"
+    QString rtmpUrl = qEnvironmentVariable("RTMP_URL").trimmed();
+    if (!rtmpUrl.isEmpty()) {
+        m_rtmpStreamer = new RtmpStreamer(WIDTH, HEIGHT, 15, rtmpUrl, this);
+    }
 
     setupUI();
     setupConnections();
 
     timer->start();
     dht11->start();
-    btAudio->start();
-    btStatusTimer->start();
+    cameraThread->start();
 }
 
 MainWindow::~MainWindow()
 {
-    if (btAudio) {
-        btAudio->stop();
+    if (m_rtmpStreamer) {
+        m_rtmpStreamer->stop();
+        m_rtmpStreamer->wait();
     }
+    cameraThread->stop();
+    cameraThread->wait();
     delete request;
 }
 
@@ -134,6 +146,19 @@ void MainWindow::setupUI()
         );
         cameraLabel->setMinimumSize(300, 280);
 
+        btnCameraToggle = new QPushButton("■ 关闭摄像头");
+        btnCameraToggle->setObjectName("navBtn");
+        btnCameraToggle->setFixedHeight(32);
+        btnCameraToggle->setStyleSheet(
+            "QPushButton#navBtn { border-bottom: 3px solid #ff4444; font-size: 13px; }"
+        );
+
+        btnCapture = new QPushButton("📸 抓拍");
+        btnCapture->setObjectName("navBtn");
+        btnCapture->setFixedHeight(32);
+        btnCapture->setStyleSheet(
+            "QPushButton#navBtn { border-bottom: 3px solid #2196f3; font-size: 13px; }"
+        );
         QHBoxLayout *navRow = new QHBoxLayout;
         navRow->setSpacing(6);
 
@@ -143,7 +168,6 @@ void MainWindow::setupUI()
         btnMonitor = makeNavBtn("Monitor", "#2196f3");
         btnSetting = makeNavBtn("Setting", "#9c27b0");
         btnAiVoice = makeNavBtn("AI Voice", "#00d4ff");
-        btnBtAudio = makeNavBtn("BT Audio", "#3ddc97");
 
         navRow->addWidget(btnMusic);
         navRow->addWidget(btnWeather);
@@ -151,10 +175,13 @@ void MainWindow::setupUI()
         navRow->addWidget(btnMonitor);
         navRow->addWidget(btnSetting);
         navRow->addWidget(btnAiVoice);
-        navRow->addWidget(btnBtAudio);
 
         midCol->addWidget(camTitle);
         midCol->addWidget(cameraLabel, 1);
+        QHBoxLayout *camBtnRow = new QHBoxLayout;
+        camBtnRow->addWidget(btnCameraToggle);
+        camBtnRow->addWidget(btnCapture);
+        midCol->addLayout(camBtnRow);   
         midCol->addSpacing(6);
         midCol->addLayout(navRow);
     }
@@ -216,8 +243,6 @@ void MainWindow::setupUI()
         lblNpu->setStyleSheet("color: #44aaff; font-size: 14px;");
         lblStatus = new QLabel("Radar: Online");
         lblStatus->setStyleSheet("color: #00ff88; font-size: 13px;");
-        lblBtAudio = new QLabel("BT Audio: 未连接");
-        lblBtAudio->setStyleSheet("color: #44aaff; font-size: 13px;");
 
         QFrame *sep3 = new QFrame;
         sep3->setObjectName("separator");
@@ -241,7 +266,6 @@ void MainWindow::setupUI()
         rightCol->addWidget(lblCpu);
         rightCol->addWidget(lblNpu);
         rightCol->addWidget(lblStatus);
-        rightCol->addWidget(lblBtAudio);
         rightCol->addWidget(sep3);
         rightCol->addWidget(clockTitle);
         rightCol->addWidget(clockWidget, 0, Qt::AlignCenter);
@@ -283,10 +307,8 @@ void MainWindow::setupConnections()
     connect(timer, &QTimer::timeout, this, &MainWindow::on_timer_updateTime);
     connect(dht11, SIGNAL(updateDht11Data(QString,QString)),
             this,  SLOT(on_update_humidity_temp(QString,QString)));
-    connect(AsrThread, &SpeechRecognition::RecordFinished,
-            this, &MainWindow::on_handleRecord);
-    connect(networkManage, &QNetworkAccessManager::finished,
-            this, &MainWindow::getSpeechResult);
+        // NOTE: legacy Baidu-ASR callback chain is intentionally disconnected to avoid
+        // concurrent recorder/network paths interfering with VoiceAssistant.
 
     connect(this, SIGNAL(SendCommandToMap(int)),     baiduMap,     SLOT(on_handleCommand(int)));
     connect(this, SIGNAL(SendCommandToMonitor(int)), monitor,      SLOT(on_handleCommand(int)));
@@ -298,17 +320,61 @@ void MainWindow::setupConnections()
     connect(btnMonitor,  &QPushButton::clicked, this, &MainWindow::onBtnMonitor);
     connect(btnSetting,  &QPushButton::clicked, this, &MainWindow::onBtnSetting);
     connect(btnAiVoice,  &QPushButton::clicked, this, &MainWindow::onBtnAiVoice);
-        connect(btnBtAudio,  &QPushButton::clicked, this, &MainWindow::onBtnBtAudio);
+
+    // VoiceAssistant 信号连接
+    connect(m_voiceAssistant, &VoiceAssistant::statusChanged,
+            this, &MainWindow::onVoiceStatus);
+    connect(m_voiceAssistant, &VoiceAssistant::sttResult,
+            this, &MainWindow::onVoiceStt);
+    connect(m_voiceAssistant, &VoiceAssistant::actionResult,
+            this, &MainWindow::onVoiceAction);
+    connect(m_voiceAssistant, &VoiceAssistant::errorOccurred,
+            this, &MainWindow::onVoiceError);
+    connect(m_voiceAssistant, &VoiceAssistant::finished,
+            this, &MainWindow::onVoiceFinished);
+
     connect(btnRadarFull,&QPushButton::clicked, this, &MainWindow::onBtnRadarFull);
+    connect(btnCameraToggle, &QPushButton::clicked, this, &MainWindow::onBtnCameraToggle);
+    connect(btnCapture, &QPushButton::clicked, this, &MainWindow::onBtnCapture);
+    connect(cameraThread, &CameraThread::frameReady,
+            this, [this](QImage img) {
+         lastFrame = img;
+        cameraLabel->setPixmap(
+            QPixmap::fromImage(img).scaled(
+                cameraLabel->size(), Qt::KeepAspectRatio, Qt::FastTransformation)
+        );
+        // MJPEG 推流：每帧同步推给所有 TCP 客户端
+        if (m_mjpegServer)
+            m_mjpegServer->onNewFrame(img);
+    });
 
-        connect(btAudio, &BluetoothAudio::deviceConnected,
-            this, &MainWindow::onBtConnected);
-        connect(btAudio, &BluetoothAudio::deviceDisconnected,
-            this, &MainWindow::onBtDisconnected);
-        connect(btStatusTimer, &QTimer::timeout,
-            this, &MainWindow::onBtRefreshStatus);
+    // NV12 原始数据 → RTMP 推流（MPP 硬件 H.264 编码）
+    if (m_rtmpStreamer) {
+        connect(cameraThread, &CameraThread::nv12FrameReady,
+                m_rtmpStreamer, &RtmpStreamer::pushNv12Frame);
+        m_rtmpStreamer->start();
+    }
 }
+void MainWindow::onBtnCapture()
+{
+    if (lastFrame.isNull()) return;   // 没有帧就不保存
 
+    QString dir = "/home/cat/chezai/VehicleTerminal/picture";
+
+    // 4K 图片太大（24.8MB），PNG 编码会 OOM
+    // 超过 1080p 时先缩到 1920×1080 再保存，降低内存压力
+    QImage saveImg = lastFrame;
+    if (saveImg.width() > 1920 || saveImg.height() > 1080) {
+        saveImg = saveImg.scaled(1920, 1080, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    }
+
+    QString filename = QString("%1/cap_%2.jpg")
+        .arg(dir)
+        .arg(QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss"));
+
+    saveImg.save(filename, "JPEG", 90);  // JPEG 质量 90，内存占用远小于 PNG
+    qDebug() << "Captured:" << filename << saveImg.size();
+}
 void MainWindow::on_timer_updateTime()
 {
     lblTime->setText(QTime::currentTime().toString("HH:mm:ss"));
@@ -355,6 +421,28 @@ void MainWindow::onBtnMonitor()
     monitor->myStart();
 }
 
+void MainWindow::onBtnCameraToggle()
+{
+    if (cameraRunning) {
+        cameraThread->stop();
+        cameraThread->wait();
+        cameraRunning = false;
+        btnCameraToggle->setText("▶ 开启摄像头");
+        btnCameraToggle->setStyleSheet(
+            "QPushButton#navBtn { border-bottom: 3px solid #4caf50; font-size: 13px; }"
+        );
+        cameraLabel->clear();
+        cameraLabel->setText("摄像头已关闭\n\n点击下方按钮重新开启");
+    } else {
+        cameraThread->start();
+        cameraRunning = true;
+        btnCameraToggle->setText("■ 关闭摄像头");
+        btnCameraToggle->setStyleSheet(
+            "QPushButton#navBtn { border-bottom: 3px solid #ff4444; font-size: 13px; }"
+        );
+    }
+}
+
 void MainWindow::onBtnRadarFull()
 {
     QWidget *container = new QWidget(nullptr);
@@ -383,79 +471,97 @@ void MainWindow::onBtnRadarFull()
 
 void MainWindow::onBtnAiVoice()
 {
-    if (m_aiVoicePending) {
+    if (m_voiceAssistant->isRunning()) {
+        // 再次点击 → 提前结束录音
+        m_voiceAssistant->stopRecording();
         return;
     }
 
-    m_aiVoicePending = true;
-    lblStatus->setText("AI Voice: Running...");
+    lblStatus->setText("AI Voice: Starting...");
     lblStatus->setStyleSheet("color: #00d4ff; font-size: 13px;");
+    btnAiVoice->setStyleSheet(
+        "QPushButton#navBtn { border-bottom: 3px solid #ff4444; }");
+    btnAiVoice->setText("■ Stop");
 
-    AsrThread->startRecord();
-    QTimer::singleShot(2500, this, [this]() {
-        AsrThread->stopRecord();
-        lblStatus->setText("AI Voice: Recognizing...");
-        lblStatus->setStyleSheet("color: #00d4ff; font-size: 13px;");
-    });
-
-    QTimer::singleShot(15000, this, [this]() {
-        if (m_aiVoicePending) {
-            m_aiVoicePending = false;
-            lblStatus->setText("AI Voice: Timeout");
-            lblStatus->setStyleSheet("color: #ff4444; font-size: 13px;");
-        }
-    });
+    m_voiceAssistant->start(5);  // 录音 5 秒
 }
 
-void MainWindow::onBtnBtAudio()
+void MainWindow::onVoiceStatus(const QString &status)
 {
-    if (m_btAudioEnabled) {
-        btAudio->stop();
-        m_btAudioEnabled = false;
-        btnBtAudio->setText("BT Audio Off");
-        lblBtAudio->setText("BT Audio: 已关闭");
-        lblBtAudio->setStyleSheet("color: #999999; font-size: 13px;");
-        return;
+    if (status.startsWith("LLM JSON:")) {
+        m_lastLlmJson = status;
     }
-
-    btAudio->start();
-    m_btAudioEnabled = true;
-    btnBtAudio->setText("BT Audio");
-    onBtRefreshStatus();
+    lblStatus->setText(QString("AI Voice: %1").arg(status));
+    lblStatus->setStyleSheet("color: #00d4ff; font-size: 13px;");
 }
 
-void MainWindow::onBtConnected(QString deviceName)
+void MainWindow::onVoiceStt(const QString &text)
 {
-    lblBtAudio->setText(QString("BT Audio: 已连接 %1").arg(deviceName));
-    lblBtAudio->setStyleSheet("color: #00ff88; font-size: 13px;");
+    m_lastSttText = text;
+    lblStatus->setText(QString("STT: %1").arg(text));
+    lblStatus->setStyleSheet("color: #00ff88; font-size: 13px;");
 }
 
-void MainWindow::onBtDisconnected()
+void MainWindow::onVoiceAction(const QString &action, const QString &param)
 {
-    if (!m_btAudioEnabled) {
-        return;
-    }
-    lblBtAudio->setText("BT Audio: 未连接");
-    lblBtAudio->setStyleSheet("color: #44aaff; font-size: 13px;");
-}
-
-void MainWindow::onBtRefreshStatus()
-{
-    if (!m_btAudioEnabled) {
-        return;
-    }
-
-    const QString status = btAudio->getStatus();
-    if (status.startsWith("已连接")) {
-        lblBtAudio->setText(QString("BT Audio: %1").arg(status));
-        lblBtAudio->setStyleSheet("color: #00ff88; font-size: 13px;");
-    } else if (status.contains("未连接")) {
-        lblBtAudio->setText("BT Audio: 未连接");
-        lblBtAudio->setStyleSheet("color: #44aaff; font-size: 13px;");
+    dispatchVoiceAction(action, param);
+    if (action == "unknown" || action == "unknow") {
+        QString debugText = QString("AI: unknown\nSTT:%1\n%2")
+            .arg(m_lastSttText)
+            .arg(m_lastLlmJson);
+        lblStatus->setText(debugText);
+        lblStatus->setStyleSheet("color: #ffbb33; font-size: 12px;");
     } else {
-        lblBtAudio->setText(QString("BT Audio: %1").arg(status));
-        lblBtAudio->setStyleSheet("color: #ff9800; font-size: 13px;");
+        lblStatus->setText(QString("AI: %1 %2").arg(action, param));
+        lblStatus->setStyleSheet("color: #00ff88; font-size: 13px;");
     }
+}
+
+void MainWindow::onVoiceError(const QString &msg)
+{
+    lblStatus->setText(QString("AI Voice: %1").arg(msg));
+    lblStatus->setStyleSheet("color: #ff4444; font-size: 13px;");
+}
+
+void MainWindow::onVoiceFinished()
+{
+    btnAiVoice->setStyleSheet(
+        "QPushButton#navBtn { border-bottom: 3px solid #00d4ff; }");
+    btnAiVoice->setText("AI Voice");
+}
+
+void MainWindow::dispatchVoiceAction(const QString &action, const QString &param)
+{
+    if (action == "open_music" || action == "play_music") {
+        emit SendCommandToMusic(MUSIC_COMMAND_SHOW);
+        emit SendCommandToMusic(MUSIC_COMMAND_PLAY);
+    } else if (action == "close_music") {
+        emit SendCommandToMusic(MUSIC_COMMAND_CLOSE);
+    } else if (action == "next_music") {
+        emit SendCommandToMusic(MUSIC_COMMAND_SHOW);
+        emit SendCommandToMusic(MUSIC_COMMAND_NEXT);
+    } else if (action == "prev_music") {
+        emit SendCommandToMusic(MUSIC_COMMAND_SHOW);
+        emit SendCommandToMusic(MUSIC_COMMAND_PRE);
+    } else if (action == "pause_music") {
+        emit SendCommandToMusic(MUSIC_COMMAND_SHOW);
+        emit SendCommandToMusic(MUSIC_COMMAND_PAUSE);
+    } else if (action == "open_weather") {
+        weather->show();
+    } else if (action == "open_map") {
+        emit SendCommandToMap(MAP_COMMAND_SHOW);
+    } else if (action == "open_camera") {
+        if (!cameraRunning) onBtnCameraToggle();
+    } else if (action == "close_camera") {
+        if (cameraRunning) onBtnCameraToggle();
+    } else if (action == "open_radar") {
+        onBtnRadarFull();
+    } else if (action == "open_monitor" || action == "open_dht11") {
+        onBtnMonitor();
+    } else if (action == "open_settings") {
+        onBtnSetting();
+    }
+    // unknown → 不执行任何操作
 }
 
 void MainWindow::on_handleRecord()
@@ -544,51 +650,8 @@ void MainWindow::getSpeechResult(QNetworkReply *reply)
 
     if (m_aiVoicePending) {
         m_aiVoicePending = false;
-        lblStatus->setText(QString("AI Voice: %1").arg(asr));
-
-        QtConcurrent::run([this, asr]() {
-            LlmEngine llm;
-            TtsEngine tts;
-            const std::string llmModel = "models/DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf";
-
-            if (!llm.init(llmModel, 4)) {
-                QMetaObject::invokeMethod(this, [this]() {
-                    lblStatus->setText("AI Voice: LLM Init Failed");
-                    lblStatus->setStyleSheet("color: #ff4444; font-size: 13px;");
-                }, Qt::QueuedConnection);
-                return;
-            }
-
-            const std::string userText = asr.toStdString();
-            const std::string replyText = llm.chat(userText);
-            const std::string intent = llm.parseIntent(replyText);
-
-            std::string speakText = replyText;
-            const std::string tagStart = "[INTENT:";
-            std::size_t tagPos = speakText.find(tagStart);
-            if (tagPos != std::string::npos) {
-                speakText = speakText.substr(0, tagPos);
-            }
-            tts.speak(speakText);
-
-            QMetaObject::invokeMethod(this, [this, intent]() {
-                if (intent == "OPEN_MUSIC") {
-                    emit SendCommandToMusic(MUSIC_COMMAND_SHOW);
-                    emit SendCommandToMusic(MUSIC_COMMAND_PLAY);
-                } else if (intent == "OPEN_MAP") {
-                    emit SendCommandToMap(MAP_COMMAND_SHOW);
-                } else if (intent == "OPEN_MONITOR") {
-                    emit SendCommandToMonitor(MONITOR_COMMAND_SHOW);
-                } else if (intent == "OPEN_WEATHER") {
-                    weather->show();
-                }
-
-                lblStatus->setText(QString("AI Voice: %1")
-                                   .arg(QString::fromStdString(intent)));
-                lblStatus->setStyleSheet("color: #00ff88; font-size: 13px;");
-            }, Qt::QueuedConnection);
-        });
-        return;
+        lblStatus->setText(QString("ASR: %1").arg(asr));
+        lblStatus->setStyleSheet("color: #00ff88; font-size: 13px;");
     }
 
     if      (asr.contains("播放音乐")) { emit SendCommandToMusic(MUSIC_COMMAND_SHOW); emit SendCommandToMusic(MUSIC_COMMAND_PLAY); }
